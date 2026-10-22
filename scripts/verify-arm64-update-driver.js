@@ -6,6 +6,8 @@ const path = require("node:path");
 const assert = require("node:assert/strict");
 const [installed, candidate, profile, status] = process.argv.slice(2);
 const downloadOnly = process.argv.includes("--download-only");
+const interruptFirst = process.argv.includes("--interrupt-first-download");
+let downloadAttempts = 0;
 const appRoot = path.join(installed, "resources", "app.asar");
 const packageInfo = require(path.join(appRoot, "package.json"));
 const envelope = JSON.parse(fs.readFileSync(path.join(candidate, "arm64-update.json")));
@@ -28,7 +30,6 @@ app
       "localStorage.setItem('arm64UpdateCycleSentinel', 'preserved'); localStorage.setItem('autoUpdatesEnabled', 'false')"
     );
     preferences.webContents.session.flushStorageData();
-    preferences.destroy();
     const { Arm64UpdateProvider } = require(
       path.join(appRoot, "src", "helpers", "arm64UpdateProvider")
     );
@@ -45,6 +46,10 @@ app
     autoUpdater.installDirectory = installed;
     autoUpdater.httpExecutor.download = async (url, target) => {
       assert.equal(url.href, JSON.parse(Buffer.from(envelope.payload, "base64")).installer.url);
+      if (interruptFirst && ++downloadAttempts === 1) {
+        fs.writeFileSync(target, "partial download");
+        throw new Error("Simulated interrupted download");
+      }
       await fs.promises.copyFile(path.join(candidate, provenance.installer), target);
     };
     const Manager = require(path.join(appRoot, "src", "updater"));
@@ -53,6 +58,10 @@ app
     const available = await manager.checkForUpdates();
     assert.equal(available.updateAvailable, true);
     assert.equal(available.version, provenance.version);
+    if (interruptFirst) {
+      await assert.rejects(manager.downloadUpdate(), /Simulated interrupted download/);
+      assert.equal(manager.isDownloading, false);
+    }
     await manager.downloadUpdate();
     assert.equal(manager.updateDownloaded, true);
     assert.equal(autoUpdater.autoInstallOnAppQuit, false);
@@ -66,6 +75,7 @@ app
         authenticated: true,
         downloaded: true,
         previousVersion: packageInfo.version,
+        resumedAfterInterruption: interruptFirst,
       })
     );
     if (downloadOnly) {
