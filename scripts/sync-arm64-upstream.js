@@ -28,6 +28,14 @@ function shouldRetryOffline(run, jobs) {
   );
 }
 
+function selectCandidate(releases, currentTag, openPrs) {
+  const pending = openPrs
+    .filter((pr) => !pr.isCrossRepository && /^sync\/v\d+\.\d+\.\d+$/.test(pr.headRefName))
+    .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))[0];
+  if (!pending) return selectRelease(releases, currentTag);
+  return releases.find((release) => release.tag_name === pending.headRefName.slice(5)) || null;
+}
+
 function archiveUpstreamWorkflows() {
   const dir = ".github/workflows";
   const archive = ".github/upstream-workflows";
@@ -64,7 +72,21 @@ async function sync() {
       "map({tag_name,draft,prerelease})"
     )
   );
-  const candidate = selectRelease(releases, state.upstreamTag);
+  const openPrs = JSON.parse(
+    gh(
+      "pr",
+      "list",
+      "--repo",
+      REPOSITORY,
+      "--base",
+      "arm64",
+      "--state",
+      "open",
+      "--json",
+      "headRefName,isCrossRepository,createdAt"
+    )
+  );
+  const candidate = selectCandidate(releases, state.upstreamTag, openPrs);
   if (!candidate) {
     console.log("No new stable upstream release.");
     return;
@@ -82,9 +104,9 @@ async function sync() {
       "--state",
       "all",
       "--json",
-      "number,state,isDraft"
+      "number,state,isDraft,isCrossRepository"
     )
-  );
+  ).filter((pr) => !pr.isCrossRepository);
   if (prs.some((p) => p.state !== "CLOSED")) {
     const open = prs.find((p) => p.state === "OPEN" && !p.isDraft);
     if (open) {
@@ -204,4 +226,10 @@ if (require.main === module)
     console.error(error.message);
     process.exitCode = 1;
   });
-module.exports = { selectRelease, archiveUpstreamWorkflows, mergeCandidate, shouldRetryOffline };
+module.exports = {
+  selectRelease,
+  selectCandidate,
+  archiveUpstreamWorkflows,
+  mergeCandidate,
+  shouldRetryOffline,
+};

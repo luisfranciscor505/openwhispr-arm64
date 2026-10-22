@@ -4,6 +4,21 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const { selectRelease } = require("../../scripts/sync-arm64-upstream");
+test("finishes an existing owned candidate before creating another and ignores external PR heads", () => {
+  const { selectCandidate } = require("../../scripts/sync-arm64-upstream");
+  const releases = [{ tag_name: "v1.10.6" }, { tag_name: "v1.10.5" }];
+  assert.equal(
+    selectCandidate(releases, "v1.10.4", [
+      { headRefName: "sync/v1.10.5", isCrossRepository: false },
+    ]).tag_name,
+    "v1.10.5"
+  );
+  assert.equal(
+    selectCandidate(releases, "v1.10.4", [{ headRefName: "sync/v1.10.5", isCrossRepository: true }])
+      .tag_name,
+    "v1.10.6"
+  );
+});
 test("retries an expired offline runner queue, but never hides failed NPU tests", () => {
   const { shouldRetryOffline } = require("../../scripts/sync-arm64-upstream");
   const run = { status: "completed", conclusion: "failure" };
