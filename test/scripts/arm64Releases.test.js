@@ -5,6 +5,46 @@ const path = require("node:path");
 const os = require("node:os");
 const { selectRelease } = require("../../scripts/sync-arm64-upstream");
 const { hash, assertEvidence } = require("../../scripts/lib/arm64-release");
+test("conflicted upstream merges abort cleanly and preserve the port", () => {
+  const { execFileSync } = require("node:child_process");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "arm64-merge-"));
+  const git = (...args) =>
+    execFileSync("git", args, { cwd: dir, encoding: "utf8", windowsHide: true });
+  try {
+    git("init", "-b", "port");
+    git("config", "core.autocrlf", "false");
+    git("config", "user.email", "test@example.invalid");
+    git("config", "user.name", "Test");
+    fs.writeFileSync(path.join(dir, "shared.txt"), "base\n");
+    git("add", ".");
+    git("commit", "-m", "base");
+    git("branch", "upstream");
+    fs.writeFileSync(path.join(dir, "shared.txt"), "ARM64 port\n");
+    git("commit", "-am", "port");
+    git("checkout", "upstream");
+    fs.writeFileSync(path.join(dir, "shared.txt"), "upstream change\n");
+    git("commit", "-am", "upstream");
+    git("checkout", "port");
+    const modulePath = require.resolve("../../scripts/sync-arm64-upstream");
+    const result = JSON.parse(
+      execFileSync(
+        process.execPath,
+        [
+          "-e",
+          `console.log(JSON.stringify(require(process.argv[1]).mergeCandidate('upstream')))`,
+          modulePath,
+        ],
+        { cwd: dir, encoding: "utf8" }
+      )
+    );
+    assert.equal(result.blocked, true);
+    assert.deepEqual(result.conflicts, ["shared.txt"]);
+    assert.equal(fs.readFileSync(path.join(dir, "shared.txt"), "utf8"), "ARM64 port\n");
+    assert.equal(git("status", "--porcelain").trim(), "");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 test("selects only newer stable upstream releases and is idempotent", () => {
   const releases = [
     { tag_name: "v1.10.6", prerelease: true },

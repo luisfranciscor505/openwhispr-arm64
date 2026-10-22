@@ -23,6 +23,21 @@ function archiveUpstreamWorkflows() {
   }
 }
 
+function mergeCandidate(upstreamCommit) {
+  const merge = spawnSync("git", ["merge", "--no-edit", upstreamCommit], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (merge.status === 0) return { blocked: false, conflicts: [] };
+  const conflicts = git("diff", "--name-only", "--diff-filter=U").split(/\r?\n/).filter(Boolean);
+  git("merge", "--abort");
+  if (!conflicts.length)
+    throw new Error(
+      "Upstream merge failed without conflicts; inspect the Git failure before retrying"
+    );
+  return { blocked: true, conflicts };
+}
+
 async function sync() {
   const gh = (...args) => execFileSync("gh", args, { encoding: "utf8", windowsHide: true }).trim();
   const state = JSON.parse(fs.readFileSync("arm64-release.json", "utf8"));
@@ -70,16 +85,8 @@ async function sync() {
   git("fetch", "upstream", `refs/tags/${candidate.tag_name}:refs/tags/${candidate.tag_name}`);
   const upstreamCommit = git("rev-parse", `${candidate.tag_name}^{commit}`);
   git("checkout", "-b", branch);
-  const merge = spawnSync("git", ["merge", "--no-edit", upstreamCommit], {
-    encoding: "utf8",
-    windowsHide: true,
-  });
-  const blocked = merge.status !== 0;
-  let conflicts = [];
-  if (blocked) {
-    conflicts = git("diff", "--name-only", "--diff-filter=U").split(/\r?\n/).filter(Boolean);
-    git("merge", "--abort");
-  } else {
+  const { blocked, conflicts } = mergeCandidate(upstreamCommit);
+  if (!blocked) {
     archiveUpstreamWorkflows();
     fs.writeFileSync(
       "arm64-release.json",
@@ -145,4 +152,4 @@ if (require.main === module)
     console.error(error.message);
     process.exitCode = 1;
   });
-module.exports = { selectRelease, archiveUpstreamWorkflows };
+module.exports = { selectRelease, archiveUpstreamWorkflows, mergeCandidate };
