@@ -39,6 +39,7 @@ app
       assert.equal(es.backend, "qnn-htp");
       await npu.stop();
       const graphs = new Set();
+      result.npuProfiles = [];
       for (const file of fs.readdirSync(profiles).filter((name) => name.endsWith(".json"))) {
         const kernels = JSON.parse(fs.readFileSync(path.join(profiles, file))).filter(
           (event) => event.args?.provider
@@ -47,10 +48,16 @@ app
         assert.ok(kernels.every((event) => event.args.provider === "QNNExecutionProvider"));
         if (file.startsWith("encoder")) graphs.add("encoder");
         if (file.startsWith("decoder")) graphs.add("decoder");
+        result.npuProfiles.push({
+          graph: file.startsWith("encoder") ? "encoder" : "decoder",
+          provider: "QNNExecutionProvider",
+          kernels: kernels.length,
+        });
       }
       assert.equal(graphs.size, 2);
       result.npu = true;
       result.multilingual = true;
+      result.referenceTranscripts = { en: en.text, es: es.text };
       const controller = new AbortController();
       const cancelled = npu.transcribe(english, { language: "en", signal: controller.signal });
       setTimeout(() => controller.abort(), 5);
