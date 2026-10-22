@@ -26,70 +26,80 @@ const run = (exe, args, env = {}) =>
     stdio: "inherit",
     timeout: 1200000,
   });
-try {
-  assert.equal(process.platform, "win32");
-  assert.equal(process.arch, "arm64");
-  // Installation writes HKCU uninstall/protocol entries. Never run against the
-  // user's ordinary account, even when the destination itself is isolated.
-  assert.equal(
-    os.userInfo().username.toLowerCase(),
-    "openwhisprverify",
-    "Use the dedicated OpenWhisprVerify Windows account"
-  );
-  assert.equal(provenance.sourceCommit, process.env.CANDIDATE_SHA);
-  assert.equal(provenance.runId, process.env.GITHUB_RUN_ID);
-  assert.equal(provenance.runAttempt, process.env.GITHUB_RUN_ATTEMPT);
-  assert.equal(hash(installer), provenance.installerSha256);
-  run(installer, ["/S", `/D=${installed}`]);
-  for (const item of provenance.inventory) {
-    const target = path.resolve(installed, item.path);
-    assert.ok(target.startsWith(installed + path.sep));
-    assert.equal(hash(target), item.sha256, `Installed file mismatch: ${item.path}`);
-    if (/\.(exe|dll|node)$/i.test(item.path)) assertPeArchitecture(target);
+async function verify() {
+  try {
+    assert.equal(process.platform, "win32");
+    assert.equal(process.arch, "arm64");
+    // Installation writes HKCU uninstall/protocol entries. Never run against the
+    // user's ordinary account, even when the destination itself is isolated.
+    assert.equal(
+      os.userInfo().username.toLowerCase(),
+      "openwhisprverify",
+      "Use the dedicated OpenWhisprVerify Windows account"
+    );
+    assert.equal(provenance.sourceCommit, process.env.CANDIDATE_SHA);
+    assert.equal(provenance.runId, process.env.GITHUB_RUN_ID);
+    assert.equal(provenance.runAttempt, process.env.GITHUB_RUN_ATTEMPT);
+    assert.equal(hash(installer), provenance.installerSha256);
+    run(installer, ["/S", `/D=${installed}`]);
+    for (const item of provenance.inventory) {
+      const target = path.resolve(installed, item.path);
+      assert.ok(target.startsWith(installed + path.sep));
+      assert.equal(hash(target), item.sha256, `Installed file mismatch: ${item.path}`);
+      if (/\.(exe|dll|node)$/i.test(item.path)) assertPeArchitecture(target);
+    }
+    report.installedBytesMatch = true;
+    const models = path.join(work, "models");
+    const fixtureModels = process.env.OPENWHISPR_VERIFY_MODELS;
+    assert.ok(
+      fixtureModels && path.isAbsolute(fixtureModels),
+      "Configure the isolated runner model cache"
+    );
+    fs.cpSync(fixtureModels, models, {
+      recursive: true,
+      filter: (src) => !/profiles|npu-acceleration\.json/.test(src),
+    });
+    const engineReport = path.join(work, "engines.json");
+    run(path.join(root, "node_modules", "electron", "dist", "electron.exe"), [
+      path.join(root, "scripts", "verify-arm64-release-engines.js"),
+      installed,
+      models,
+      engineReport,
+    ]);
+    Object.assign(report, JSON.parse(fs.readFileSync(engineReport, "utf8")));
+    const output = path.join(work, "ui");
+    run(path.join(root, "node_modules", "electron", "dist", "electron.exe"), [
+      path.join(root, "scripts", "verify-windows-arm64-ui.js"),
+      "--installed",
+      "--install-dir",
+      installed,
+      "--report-dir",
+      output,
+    ]);
+    const ui = JSON.parse(fs.readFileSync(path.join(output, "installed-startup.json")));
+    assert.equal(ui.success, true);
+    assert.equal(ui.ipc, true);
+    report.rendererIpc = true;
+    Object.assign(
+      report,
+      await require("./verify-arm64-update-cycle").verifyCycle(candidate, work)
+    );
+    report.success = true;
+  } catch (error) {
+    // Public evidence contains no account paths, profile contents, or screenshots.
+    console.error(error.message);
+    report.failure = "Candidate verification failed; inspect the private runner log.";
+    process.exitCode = 1;
+  } finally {
+    fs.writeFileSync(
+      path.join(candidate, "hardware-verification.json"),
+      JSON.stringify(report, null, 2)
+    );
+    // Retain failing isolated directories locally for diagnosis; never publish them.
+    if (report.success) fs.rmSync(work, { recursive: true, force: true });
   }
-  report.installedBytesMatch = true;
-  const models = path.join(work, "models");
-  const fixtureModels = process.env.OPENWHISPR_VERIFY_MODELS;
-  assert.ok(
-    fixtureModels && path.isAbsolute(fixtureModels),
-    "Configure the isolated runner model cache"
-  );
-  fs.cpSync(fixtureModels, models, {
-    recursive: true,
-    filter: (src) => !/profiles|npu-acceleration\.json/.test(src),
-  });
-  const engineReport = path.join(work, "engines.json");
-  run(path.join(root, "node_modules", "electron", "dist", "electron.exe"), [
-    path.join(root, "scripts", "verify-arm64-release-engines.js"),
-    installed,
-    models,
-    engineReport,
-  ]);
-  Object.assign(report, JSON.parse(fs.readFileSync(engineReport, "utf8")));
-  const output = path.join(work, "ui");
-  run(path.join(root, "node_modules", "electron", "dist", "electron.exe"), [
-    path.join(root, "scripts", "verify-windows-arm64-ui.js"),
-    "--installed",
-    "--install-dir",
-    installed,
-    "--report-dir",
-    output,
-  ]);
-  const ui = JSON.parse(fs.readFileSync(path.join(output, "installed-startup.json")));
-  assert.equal(ui.success, true);
-  assert.equal(ui.ipc, true);
-  report.rendererIpc = true;
-  report.success = true;
-} catch (error) {
-  // Public evidence contains no account paths, profile contents, or screenshots.
-  console.error(error.message);
-  report.failure = "Candidate verification failed; inspect the private runner log.";
-  process.exitCode = 1;
-} finally {
-  fs.writeFileSync(
-    path.join(candidate, "hardware-verification.json"),
-    JSON.stringify(report, null, 2)
-  );
-  // Retain failing isolated directories locally for diagnosis; never publish them.
-  if (report.success) fs.rmSync(work, { recursive: true, force: true });
 }
+verify().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});

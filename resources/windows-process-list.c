@@ -1,7 +1,8 @@
 #define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
 #include <stdio.h>
 #include <tlhelp32.h>
-#include <windows.h>
 
 int main(void) {
   HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);

@@ -1,16 +1,9 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
-const {
-  hash,
-  versionOf,
-  assertEvidence,
-  signedEnvelope,
-  manifestFor,
-} = require("./lib/arm64-release");
+const { hash, versionOf, assertEvidence } = require("./lib/arm64-release");
 const release = require("../arm64-release.json");
-const { REPOSITORY } = require("../src/helpers/arm64UpdateManifest");
+const { REPOSITORY, verifyManifest } = require("../src/helpers/arm64UpdateManifest");
 const output = path.resolve(process.argv[2] || "dist-arm64");
 const read = (name) => JSON.parse(fs.readFileSync(path.join(output, name), "utf8"));
 const provenance = read("provenance.json");
@@ -26,13 +19,30 @@ if (
   provenance.version !== version
 )
   throw new Error("Release source/run identity mismatch");
-const privateKey = crypto.createPrivateKey(process.env.ARM64_UPDATE_PRIVATE_KEY);
+const manifest = verifyManifest(read("arm64-update.json"), release.publicKey, version);
 if (
-  crypto.createPublicKey(privateKey).export({ type: "spki", format: "pem" }) !== release.publicKey
+  manifest.sourceCommit !== provenance.sourceCommit ||
+  manifest.upstreamCommit !== release.upstreamCommit ||
+  manifest.installer.sha512 !== hash(installer, "sha512", "base64") ||
+  manifest.installer.size !== fs.statSync(installer).size
 )
-  throw new Error("Publication signing key does not match the application trust key");
-const envelope = signedEnvelope(manifestFor(release, provenance, installer), privateKey);
-fs.writeFileSync(path.join(output, "arm64-update.json"), JSON.stringify(envelope));
+  throw new Error("Signed candidate metadata differs from verified installer");
+const previous = require("node:child_process").spawnSync(
+  "gh",
+  ["api", `repos/${REPOSITORY}/releases/latest`],
+  { encoding: "utf8" }
+);
+if (previous.status === 0) {
+  const previousVersion = JSON.parse(previous.stdout).tag_name.replace(/^v/, "");
+  if (
+    report.updateCycle !== true ||
+    report.previousVersion !== previousVersion ||
+    !report.settingsAndModelsPreserved
+  )
+    throw new Error("Installed A to B update verification is missing or stale");
+} else if (!previous.stderr.includes("404") || report.updateCycle !== "bootstrap") {
+  throw new Error("Cannot establish previous release for upgrade verification");
+}
 fs.writeFileSync(
   path.join(output, "SHA256SUMS.txt"),
   `${hash(installer)}  ${path.basename(installer)}\n`

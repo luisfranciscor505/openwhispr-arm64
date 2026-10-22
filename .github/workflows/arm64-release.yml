@@ -78,8 +78,33 @@ jobs:
           path: candidate.zip
           compression-level: 0
           retention-days: 14
-  hardware:
+  sign:
     needs: [resolve, build]
+    runs-on: ubuntu-latest
+    environment: arm64-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          name: arm64-candidate
+          path: dist-arm64
+      - run: unzip -q dist-arm64/candidate.zip -d dist-arm64
+      - run: node scripts/sign-arm64-candidate.js dist-arm64
+        env:
+          ARM64_UPDATE_PRIVATE_KEY: ${{ secrets.ARM64_UPDATE_PRIVATE_KEY }}
+          CANDIDATE_SHA: ${{ needs.resolve.outputs.sha }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arm64-candidate-manifest
+          path: dist-arm64/arm64-update.json
+  hardware:
+    needs: [resolve, sign]
     runs-on: [self-hosted, Windows, ARM64, snapdragon-npu]
     timeout-minutes: 45
     steps:
@@ -98,6 +123,10 @@ jobs:
           name: arm64-candidate
           path: candidate-download
       - run: tar -xf candidate-download/candidate.zip -C candidate-download
+      - uses: actions/download-artifact@v4
+        with:
+          name: arm64-candidate-manifest
+          path: candidate-download
       - name: Isolated installed candidate and NPU tests
         run: node scripts/verify-arm64-candidate.js candidate-download
         env:
@@ -131,11 +160,14 @@ jobs:
         with:
           name: arm64-hardware-evidence
           path: dist-arm64
+      - uses: actions/download-artifact@v4
+        with:
+          name: arm64-candidate-manifest
+          path: dist-arm64
       - name: Sign and publish verified immutable release
         run: node scripts/publish-arm64-release.js dist-arm64
         env:
           GH_TOKEN: ${{ github.token }}
-          ARM64_UPDATE_PRIVATE_KEY: ${{ secrets.ARM64_UPDATE_PRIVATE_KEY }}
           CANDIDATE_SHA: ${{ needs.resolve.outputs.sha }}
       - name: Merge verified synchronization PR
         if: inputs.candidate != 'arm64'

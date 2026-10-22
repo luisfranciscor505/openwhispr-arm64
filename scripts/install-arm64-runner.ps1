@@ -34,6 +34,7 @@ try {
     & .\config.cmd @arguments *> (Join-Path $runner 'configuration.log')
     if ($LASTEXITCODE -ne 0) { throw 'GitHub runner configuration failed; see restricted runner configuration.log' }
   } finally { Pop-Location }
+  & (Join-Path $PSScriptRoot 'secure-arm64-runner.ps1')
   @{ success = $true; runner = 'snapdragon-npu'; account = $accountName } | ConvertTo-Json | Set-Content -LiteralPath $log
 } catch {
   @{ success = $false; error = $_.Exception.Message } | ConvertTo-Json | Set-Content -LiteralPath $log
