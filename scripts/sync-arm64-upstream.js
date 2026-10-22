@@ -17,13 +17,13 @@ function shouldRetryOffline(run, jobs) {
   const hardware = jobs.find((job) => job.name === "hardware");
   return (
     run.status === "completed" &&
-    ["failure", "cancelled", "timed_out"].includes(run.conclusion) &&
+    ["failure", "timed_out"].includes(run.conclusion) &&
     jobs.some((job) => job.name === "build" && job.conclusion === "success") &&
     jobs.some((job) => job.name === "sign" && job.conclusion === "success") &&
     Boolean(
       hardware &&
       !hardware.runner_id &&
-      ["failure", "cancelled", "timed_out"].includes(hardware.conclusion)
+        ["failure", "timed_out"].includes(hardware.conclusion)
     )
   );
 }

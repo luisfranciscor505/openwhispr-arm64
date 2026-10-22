@@ -29,6 +29,7 @@ test("retries an expired offline runner queue, but never hides failed NPU tests"
   ];
   assert.equal(shouldRetryOffline(run, jobs), true);
   assert.equal(shouldRetryOffline({ ...run, status: "in_progress" }, jobs), false);
+  assert.equal(shouldRetryOffline({ ...run, conclusion: "cancelled" }, jobs), false);
   assert.equal(
     shouldRetryOffline(run, [...jobs.slice(0, 2), { ...jobs[2], runner_id: 123 }]),
     false
