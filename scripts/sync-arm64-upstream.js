@@ -26,7 +26,14 @@ function archiveUpstreamWorkflows() {
 async function sync() {
   const gh = (...args) => execFileSync("gh", args, { encoding: "utf8", windowsHide: true }).trim();
   const state = JSON.parse(fs.readFileSync("arm64-release.json", "utf8"));
-  const releases = JSON.parse(gh("api", "repos/OpenWhispr/openwhispr/releases?per_page=100"));
+  const releases = JSON.parse(
+    gh(
+      "api",
+      "repos/OpenWhispr/openwhispr/releases?per_page=100",
+      "--jq",
+      "map({tag_name,draft,prerelease})"
+    )
+  );
   const candidate = selectRelease(releases, state.upstreamTag);
   if (!candidate) {
     console.log("No new stable upstream release.");

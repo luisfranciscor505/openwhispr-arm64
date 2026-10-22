@@ -60,12 +60,16 @@ async function verify() {
       filter: (src) => !/profiles|npu-acceleration\.json/.test(src),
     });
     const engineReport = path.join(work, "engines.json");
-    run(path.join(root, "node_modules", "electron", "dist", "electron.exe"), [
-      path.join(root, "scripts", "verify-arm64-release-engines.js"),
-      installed,
-      models,
-      engineReport,
-    ]);
+    run(
+      path.join(root, "node_modules", "electron", "dist", "electron.exe"),
+      [
+        path.join(root, "scripts", "verify-arm64-release-engines.js"),
+        installed,
+        models,
+        engineReport,
+      ],
+      { PATH: path.join(process.env.SystemRoot, "System32") }
+    );
     Object.assign(report, JSON.parse(fs.readFileSync(engineReport, "utf8")));
     const output = path.join(work, "ui");
     run(path.join(root, "node_modules", "electron", "dist", "electron.exe"), [
