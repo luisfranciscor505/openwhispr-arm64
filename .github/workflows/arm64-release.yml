@@ -37,6 +37,7 @@ jobs:
     env:
       OPENWHISPR_MANAGED_RELEASE: '1'
       CARGO_PROFILE_RELEASE_DEBUG: '0'
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:

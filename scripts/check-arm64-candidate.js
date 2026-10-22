@@ -21,7 +21,10 @@ const changedPins = git(
   "src/models/whisperNpuManifest.json",
   "native/whisper-npu",
   "scripts/build-whisper-npu.js",
-  "scripts/prepare-windows-arm64.js"
+  "scripts/prepare-windows-arm64.js",
+  "scripts/download-*.js",
+  "scripts/lib/download-utils.js",
+  "scripts/lib/windows-arm64-tools.js"
 );
 if (changedPins)
   throw new Error(
