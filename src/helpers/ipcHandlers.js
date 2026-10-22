@@ -3211,6 +3211,7 @@ class IPCHandlers {
     });
 
     ipcMain.handle("transcribe-audio-file", async (event, filePath, options = {}) => {
+      if (this.updateManager.isInstalling) return { success: false, error: "Update installation in progress" };
       // Uploads pass a requestId so cancel-upload-transcription can abort the
       // local decode; flows without one (voice drafts) register nothing.
       const { signal, release } = this._uploadCancelRegistry.register(options.requestId);
@@ -3468,6 +3469,7 @@ class IPCHandlers {
     });
 
     ipcMain.handle("transcribe-local-whisper", async (_event, audioBlob, options = {}) => {
+      if (this.updateManager.isInstalling) return { success: false, error: "Update installation in progress" };
       debugLogger.log("transcribe-local-whisper called", {
         audioBlobType: typeof audioBlob,
         audioBlobSize: audioBlob?.byteLength || audioBlob?.length || 0,
@@ -9799,6 +9801,7 @@ class IPCHandlers {
     });
 
     ipcMain.handle("meeting-transcription-start", (event, options = {}) => {
+      if (this.updateManager.isInstalling) return { success: false, error: "Update installation in progress" };
       const sessionId =
         typeof options.sessionId === "string" && options.sessionId.length > 0
           ? options.sessionId
@@ -11210,6 +11213,12 @@ class IPCHandlers {
     });
 
     ipcMain.handle("install-update", async () => {
+      this.updateManager.canInstall = () =>
+        !meetingTranscriptionLifecycle.hasActiveSessions() &&
+        !this._uploadCancelRegistry.hasActive() &&
+        !this.whisperManager?._transcribing &&
+        !this.whisperManager?.npuManager?.pending?.size &&
+        !["recording", "processing"].includes(this.windowManager._dictationLifecycleState);
       return this.updateManager.installUpdate();
     });
 

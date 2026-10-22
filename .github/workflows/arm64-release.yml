@@ -1,0 +1,148 @@
+name: Verified Windows ARM64 release
+on:
+  workflow_dispatch:
+    inputs:
+      candidate:
+        description: 'arm64 or an existing sync/vX.Y.Z candidate branch'
+        default: arm64
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: arm64-publication
+  cancel-in-progress: false
+jobs:
+  resolve:
+    if: github.repository == 'luisfranciscor505/openwhispr-arm64' && github.ref == 'refs/heads/arm64'
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: resolve
+        env:
+          CANDIDATE: ${{ inputs.candidate }}
+        run: |
+          [[ "$CANDIDATE" == arm64 || "$CANDIDATE" =~ ^sync/v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          SHA=$(git rev-parse "origin/$CANDIDATE^{commit}")
+          git merge-base --is-ancestor origin/arm64 "$SHA"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+  build:
+    needs: resolve
+    runs-on: windows-11-arm
+    env:
+      OPENWHISPR_MANAGED_RELEASE: '1'
+      CARGO_PROFILE_RELEASE_DEBUG: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          architecture: arm64
+          cache: npm
+      - name: Validate candidate and pins
+        run: node scripts/check-arm64-candidate.js
+      - run: npm ci --ignore-scripts
+      - run: node node_modules/electron/install.js
+      - name: ARM64 regression tests
+        run: node --test test/helpers/arm64Updates.test.js test/helpers/whisperNpu.test.js test/helpers/whisperNpuFallback.test.js test/helpers/peArchitecture.test.js test/helpers/updater.test.js test/helpers/meetingTranscriptionLifecycle.test.js test/helpers/uploadCancelRegistry.test.js test/scripts/windowsArm64Config.test.js test/scripts/arm64Releases.test.js
+      - run: npm run lint
+      - run: npx tsc --noEmit -p src/tsconfig.json
+      - name: Native toolchain
+        shell: pwsh
+        run: |
+          if (!(Get-Command cargo -ErrorAction SilentlyContinue)) { throw 'Windows ARM64 runner needs native Rust and aarch64-pc-windows-msvc target' }
+          rustup target add aarch64-pc-windows-msvc
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .cache/arm64
+            resources/bin
+          key: arm64-native-${{ hashFiles('scripts/prepare-windows-arm64.js', 'scripts/build-whisper-npu.js', 'scripts/download-*.js', 'native/**', 'resources/*.c', 'resources/*.cpp', 'package-lock.json') }}
+      - run: npm run prepare:win:arm64
+      - run: npx electron-builder install-app-deps --arch arm64
+      - run: npm run build:renderer:win:arm64
+      - run: node node_modules/electron-builder/cli.js --config electron-builder.arm64-win.cjs --config.directories.output=dist-arm64 --win --arm64 --publish never
+      - run: node scripts/arm64-release-provenance.js dist-arm64
+      - name: Archive exact candidate
+        run: tar -a -cf candidate.zip -C dist-arm64 .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arm64-candidate
+          path: candidate.zip
+          compression-level: 0
+          retention-days: 14
+  hardware:
+    needs: [resolve, build]
+    runs-on: [self-hosted, Windows, ARM64, snapdragon-npu]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          architecture: arm64
+      - run: npm ci --ignore-scripts
+      - run: node node_modules/electron/install.js
+      - uses: actions/download-artifact@v4
+        with:
+          name: arm64-candidate
+          path: candidate-download
+      - run: tar -xf candidate-download/candidate.zip -C candidate-download
+      - name: Isolated installed candidate and NPU tests
+        run: node scripts/verify-arm64-candidate.js candidate-download
+        env:
+          CANDIDATE_SHA: ${{ needs.resolve.outputs.sha }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arm64-hardware-evidence
+          path: candidate-download/hardware-verification.json
+  publish:
+    needs: [resolve, hardware]
+    runs-on: ubuntu-latest
+    environment: arm64-release
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          name: arm64-candidate
+          path: dist-arm64
+      - run: unzip -q dist-arm64/candidate.zip -d dist-arm64
+      - uses: actions/download-artifact@v4
+        with:
+          name: arm64-hardware-evidence
+          path: dist-arm64
+      - name: Sign and publish verified immutable release
+        run: node scripts/publish-arm64-release.js dist-arm64
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARM64_UPDATE_PRIVATE_KEY: ${{ secrets.ARM64_UPDATE_PRIVATE_KEY }}
+          CANDIDATE_SHA: ${{ needs.resolve.outputs.sha }}
+      - name: Merge verified synchronization PR
+        if: inputs.candidate != 'arm64'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE: ${{ inputs.candidate }}
+          CANDIDATE_SHA: ${{ needs.resolve.outputs.sha }}
+        run: |
+          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$CANDIDATE" --json number --jq '.[0].number')
+          gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$CANDIDATE_SHA"

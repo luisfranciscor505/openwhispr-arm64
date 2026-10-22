@@ -4604,6 +4604,8 @@ EOF`,
                         className="text-xs tabular-nums text-muted-foreground font-mono"
                       >
                         {currentVersion || t("settingsPage.general.updates.versionPlaceholder")}
+                        {updateStatus.upstreamVersion &&
+                          ` · Upstream ${updateStatus.upstreamVersion} · ARM64 #${updateStatus.portRevision}`}
                       </span>
                       {updateStatus.isDevelopment ? (
                         <Badge variant="warning">

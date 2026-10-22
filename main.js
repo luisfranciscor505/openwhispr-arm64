@@ -697,6 +697,9 @@ function initializeCoreManagers() {
 
 function registerSidecars() {
   if (whisperManager) sidecarRegistry.register("whisper", () => whisperManager.stopServer());
+  updateManager.prepareInstall = async () => {
+    await sidecarRegistry.shutdownAll();
+  };
   if (parakeetManager) sidecarRegistry.register("parakeet", () => parakeetManager.stopServer());
   if (diarizationManager) {
     sidecarRegistry.register("diarization", () => diarizationManager.shutdown());

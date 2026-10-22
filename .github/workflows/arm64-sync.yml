@@ -1,0 +1,28 @@
+name: ARM64 upstream synchronization
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+concurrency:
+  group: arm64-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: github.repository == 'luisfranciscor505/openwhispr-arm64'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: arm64
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - run: node scripts/sync-arm64-upstream.js
+        env:
+          GH_TOKEN: ${{ github.token }}

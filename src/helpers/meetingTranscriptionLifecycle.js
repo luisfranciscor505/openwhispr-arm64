@@ -134,7 +134,7 @@ function createMeetingTranscriptionLifecycle({ start, stop, onError = () => {} }
     return startPromise;
   };
 
-  return { startSession, stopSession };
+  return { startSession, stopSession, hasActiveSessions: () => sessions.size > 0 };
 }
 
 module.exports = createMeetingTranscriptionLifecycle;

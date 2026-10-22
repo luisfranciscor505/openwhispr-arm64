@@ -7,6 +7,7 @@ function createUploadCancelRegistry() {
   const controllers = new Map();
 
   return {
+    hasActive: () => controllers.size > 0,
     // Registers one operation. Missing/invalid ids are inert — flows without a
     // requestId (dictation, voice drafts, warm-ups) get no signal and a no-op
     // release, so their behavior is untouched.

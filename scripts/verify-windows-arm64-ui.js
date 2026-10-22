@@ -4,6 +4,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const root = path.resolve(__dirname, "..");
+const option = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : null; };
 const packaged = process.argv.includes("--packaged");
 const installed = process.argv.includes("--installed");
 const meetingFlows = process.argv.includes("--meeting-flows");
@@ -14,12 +15,12 @@ const outputIndex = process.argv.indexOf("--output-dir");
 const packageOutput =
   outputIndex >= 0 ? path.resolve(root, process.argv[outputIndex + 1]) : path.join(root, "dist");
 const appRoot = installed
-  ? path.join(process.env.LOCALAPPDATA, "Programs", "OpenWhispr", "resources", "app.asar")
+  ? path.join(option("--install-dir") || path.join(process.env.LOCALAPPDATA, "Programs", "OpenWhispr"), "resources", "app.asar")
   : packaged
     ? path.join(packageOutput, "win-arm64-unpacked", "resources", "app.asar")
     : root;
 const temporaryHome = fs.mkdtempSync(path.join(os.tmpdir(), "ow-arm64-ui-"));
-const output = path.join(root, "artifacts", "windows-arm64");
+const output = path.resolve(option("--report-dir") || path.join(root, "artifacts", "windows-arm64"));
 fs.mkdirSync(path.join(temporaryHome, "profile"));
 fs.mkdirSync(path.join(temporaryHome, "appdata"));
 fs.mkdirSync(output, { recursive: true });
@@ -77,6 +78,8 @@ app.whenReady().then(async () => {
     )[0];
     if (!window) throw new Error("No application window was created");
     const text = await window.webContents.executeJavaScript("document.body.innerText");
+    const ipcVersion = await window.webContents.executeJavaScript("window.electronAPI.getAppVersion()");
+    if (!ipcVersion?.version) throw new Error("Installed renderer/preload/main IPC failed");
     if (text.length < 50 || errors.length)
       throw new Error(`Startup failed: ${JSON.stringify(errors)} ${text}`);
     let processDetection;
@@ -100,6 +103,7 @@ app.whenReady().then(async () => {
       JSON.stringify(
         {
           success: true,
+          ipc: true,
           arch: process.arch,
           windows: windows.length,
           text: text.slice(0, 1200),

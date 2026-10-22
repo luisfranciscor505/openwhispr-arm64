@@ -3,6 +3,10 @@
 const fs = require("fs");
 const path = require("path");
 const shared = require("./electron-builder.json");
+const release = require("./arm64-release.json");
+const managed = process.env.OPENWHISPR_MANAGED_RELEASE === "1";
+if (managed && !release.publicKey.startsWith("-----BEGIN PUBLIC KEY-----"))
+  throw new Error("Managed ARM64 releases require a pinned update public key");
 
 // 7za 24 auto-selects ARM64 filters that the bundled legacy Nsis7z decoder
 // silently skips. Single-stream BCJ preserves every PE during installation.
@@ -11,7 +15,10 @@ process.env.ELECTRON_BUILDER_7Z_FILTER = "BCJ";
 
 module.exports = {
   ...shared,
-  extraMetadata: { ...shared.extraMetadata, windowsTrayIdentity: false, localArm64Build: true },
+  extraMetadata: {
+    ...shared.extraMetadata, windowsTrayIdentity: false, localArm64Build: true,
+    ...(managed ? { arm64Release: release, version: `${release.upstreamTag.slice(1)}-arm64.${release.portRevision}` } : {}),
+  },
   win: {
     ...shared.win,
     azureSignOptions: null,
@@ -22,7 +29,7 @@ module.exports = {
   },
   nsis: { ...shared.nsis, packElevateHelper: false },
   extraResources: [
-    ...(fs.existsSync(path.join(__dirname, ".env")) ? [".env"] : []),
+    // Personal .env files must never be distributed in public installers.
     { from: "src/assets", to: "src/assets", filter: ["**/*", "!fonts/yowza/**"] },
     {
       from: "resources/bin",

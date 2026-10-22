@@ -3,8 +3,13 @@ const { autoUpdater } = require("electron-updater");
 // electron-updater can only replace an AppImage on Linux; deb, rpm and tar.gz
 // installs are updated by the package manager instead.
 const isLocalArm64Build = require("../package.json").localArm64Build === true;
+const release = require("../package.json").arm64Release;
+const isManagedArm64Build = Boolean(
+  release && process.platform === "win32" && process.arch === "arm64"
+);
+const updatesDisabled = isLocalArm64Build && !isManagedArm64Build;
 const isUpdaterSupported =
-  !isLocalArm64Build && (process.platform !== "linux" || Boolean(process.env.APPIMAGE));
+  !updatesDisabled && (process.platform !== "linux" || Boolean(process.env.APPIMAGE));
 
 class UpdateManager {
   constructor() {
@@ -20,6 +25,9 @@ class UpdateManager {
     this.windowManager = null;
     // null until the renderer syncs the preference, so nothing downloads unasked.
     this.autoUpdatesEnabled = null;
+    this.verifiedManifests = new Map();
+    this.canInstall = () => true;
+    this.prepareInstall = async () => {};
 
     this.setupAutoUpdater();
   }
@@ -29,17 +37,30 @@ class UpdateManager {
   }
 
   setupAutoUpdater() {
-    if (isLocalArm64Build) return;
+    if (updatesDisabled) return;
     if (process.env.NODE_ENV === "development") {
       return;
     }
 
-    autoUpdater.setFeedURL({
-      provider: "github",
-      owner: "OpenWhispr",
-      repo: "openwhispr",
-      private: false,
-    });
+    if (isManagedArm64Build) {
+      const { Arm64UpdateProvider } = require("./helpers/arm64UpdateProvider");
+      autoUpdater.setFeedURL({
+        provider: "custom",
+        updateProvider: Arm64UpdateProvider,
+        publicKey: release.publicKey,
+        onVerified: (manifest) => this.verifiedManifests.set(manifest.version, manifest),
+      });
+      autoUpdater.allowPrerelease = true;
+      autoUpdater.allowDowngrade = false;
+      autoUpdater.disableDifferentialDownload = true;
+      autoUpdater.disableWebInstaller = true;
+    } else
+      autoUpdater.setFeedURL({
+        provider: "github",
+        owner: "OpenWhispr",
+        repo: "openwhispr",
+        private: false,
+      });
 
     // Use arch-specific update channel on macOS to prevent arm64/x64
     // from downloading mismatched artifacts. Both builds publish to the
@@ -72,7 +93,7 @@ class UpdateManager {
     }
 
     autoUpdater.autoDownload = false;
-    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.autoInstallOnAppQuit = !isManagedArm64Build;
     autoUpdater.logger = console;
 
     this.setupEventHandlers();
@@ -118,6 +139,8 @@ class UpdateManager {
       "update-downloaded": (info) => {
         console.log("✅ Update downloaded successfully:", info?.version);
         this.updateDownloaded = true;
+        this.downloadedFile = info?.downloadedFile;
+        this.downloadedVersion = info?.version;
         this.isDownloading = false;
         if (info) {
           this.lastUpdateInfo = {
@@ -203,7 +226,7 @@ class UpdateManager {
   }
 
   async downloadUpdate() {
-    if (isLocalArm64Build)
+    if (updatesDisabled)
       return { success: false, message: "Updates are disabled for this local ARM64 build" };
     try {
       if (process.env.NODE_ENV === "development") {
@@ -241,7 +264,7 @@ class UpdateManager {
   }
 
   async installUpdate() {
-    if (isLocalArm64Build)
+    if (updatesDisabled)
       return { success: false, message: "Updates are disabled for this local ARM64 build" };
     try {
       if (process.env.NODE_ENV === "development") {
@@ -265,6 +288,29 @@ class UpdateManager {
         };
       }
 
+      if (isManagedArm64Build) {
+        if (!this.canInstall()) {
+          return {
+            success: false,
+            message: "Finish recording or transcription before restarting to update.",
+          };
+        }
+        this.isInstalling = true;
+        const { verifyInstaller } = require("./helpers/arm64UpdateManifest");
+        await verifyInstaller(
+          this.downloadedFile,
+          this.verifiedManifests.get(this.downloadedVersion)
+        );
+        if (!this.canInstall()) {
+          this.isInstalling = false;
+          return { success: false, message: "Transcription is still active." };
+        }
+        await this.prepareInstall();
+        await verifyInstaller(
+          this.downloadedFile,
+          this.verifiedManifests.get(this.downloadedVersion)
+        );
+      }
       this.isInstalling = true;
       console.log("🔄 Installing update and restarting...");
 
@@ -282,7 +328,12 @@ class UpdateManager {
   async getAppVersion() {
     try {
       const { app } = require("electron");
-      return { version: app.getVersion() };
+      return {
+        version: app.getVersion(),
+        ...(isManagedArm64Build
+          ? { upstreamVersion: release.upstreamTag.slice(1), portRevision: release.portRevision }
+          : {}),
+      };
     } catch (error) {
       console.error("❌ Error getting app version:", error);
       throw error;
@@ -296,6 +347,9 @@ class UpdateManager {
         updateDownloaded: this.updateDownloaded,
         isDevelopment: process.env.NODE_ENV === "development",
         isSupported: isUpdaterSupported,
+        ...(isManagedArm64Build
+          ? { upstreamVersion: release.upstreamTag.slice(1), portRevision: release.portRevision }
+          : {}),
       };
     } catch (error) {
       console.error("❌ Error getting update status:", error);
