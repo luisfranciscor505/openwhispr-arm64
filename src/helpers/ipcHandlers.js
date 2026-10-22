@@ -657,7 +657,6 @@ class IPCHandlers {
     this.diarizationManager = managers.diarizationManager;
     this.windowManager = managers.windowManager;
     this.updateManager = managers.updateManager;
-    this.updateActivity = require("./updateActivity").createUpdateActivity(() => this.updateManager?.isInstalling);
     this.windowsKeyManager = managers.windowsKeyManager;
     this.linuxKeyManager = managers.linuxKeyManager;
     this.textEditMonitor = managers.textEditMonitor;
@@ -1547,6 +1546,8 @@ class IPCHandlers {
   }
 
   setupHandlers() {
+    this.updateActivity = require("./updateActivity").createUpdateActivity(() => this.updateManager?.isInstalling === true);
+    const handleTranscription = (channel, handler) => ipcMain.handle(channel, this.updateActivity.wrap(handler));
     ipcMain.handle("onboarding-set-window-mode", (_event, mode) =>
       this.windowManager.setOnboardingWindowMode(mode)
     );
@@ -3211,8 +3212,7 @@ class IPCHandlers {
       }
     });
 
-    this.handleTranscription("transcribe-audio-file", async (event, filePath, options = {}) => {
-      if (this.updateManager.isInstalling) return { success: false, error: "Update installation in progress" };
+    handleTranscription("transcribe-audio-file", async (event, filePath, options = {}) => {
       // Uploads pass a requestId so cancel-upload-transcription can abort the
       // local decode; flows without one (voice drafts) register nothing.
       const { signal, release } = this._uploadCancelRegistry.register(options.requestId);
@@ -3469,8 +3469,7 @@ class IPCHandlers {
       return { success: true };
     });
 
-    this.handleTranscription("transcribe-local-whisper", async (_event, audioBlob, options = {}) => {
-      if (this.updateManager.isInstalling) return { success: false, error: "Update installation in progress" };
+    handleTranscription("transcribe-local-whisper", async (_event, audioBlob, options = {}) => {
       debugLogger.log("transcribe-local-whisper called", {
         audioBlobType: typeof audioBlob,
         audioBlobSize: audioBlob?.byteLength || audioBlob?.length || 0,
@@ -3870,7 +3869,7 @@ class IPCHandlers {
       return this.whisperManager.checkFFmpegAvailability();
     });
 
-    this.handleTranscription("transcribe-local-parakeet", async (_event, audioBlob, options = {}) => {
+    handleTranscription("transcribe-local-parakeet", async (_event, audioBlob, options = {}) => {
       debugLogger.log("transcribe-local-parakeet called", {
         audioBlobType: typeof audioBlob,
         audioBlobSize: audioBlob?.byteLength || audioBlob?.length || 0,
@@ -4066,7 +4065,7 @@ class IPCHandlers {
       }
     });
 
-    this.handleTranscription("diarize-audio-file", async (event, filePath, options = {}) => {
+    handleTranscription("diarize-audio-file", async (event, filePath, options = {}) => {
       // Registered under the same requestId as the upload's transcription, so
       // one cancel kills both the decode and the diarization child process.
       const { signal, release } = this._uploadCancelRegistry.register(options.requestId);
@@ -6734,7 +6733,7 @@ class IPCHandlers {
       configPath: "note-recording-config",
     });
 
-    this.handleTranscription("cloud-transcribe", async (event, audioBuffer, opts = {}) => {
+    handleTranscription("cloud-transcribe", async (event, audioBuffer, opts = {}) => {
       const sender = event.sender;
       const senderId = sender.id;
       const requestId = crypto.randomUUID();
@@ -9802,7 +9801,7 @@ class IPCHandlers {
     });
 
     ipcMain.handle("meeting-transcription-start", (event, options = {}) => {
-      if (this.updateManager.isInstalling) return { success: false, error: "Update installation in progress" };
+      if (this.updateManager?.isInstalling === true) return { success: false, error: "Update installation in progress" };
       const sessionId =
         typeof options.sessionId === "string" && options.sessionId.length > 0
           ? options.sessionId
@@ -10613,7 +10612,7 @@ class IPCHandlers {
 
     ipcMain.handle("get-note-recording-config", handleNoteRecordingConfigRequest);
 
-    this.handleTranscription("transcribe-audio-file-cloud", async (event, filePath, opts = {}) => {
+    handleTranscription("transcribe-audio-file-cloud", async (event, filePath, opts = {}) => {
       const requestId = typeof opts?.requestId === "string" ? opts.requestId : null;
       const { signal, release } = this._uploadCancelRegistry.register(requestId);
       let cleanupUpload = null;
@@ -13373,11 +13372,6 @@ class IPCHandlers {
         }
       }
     })();
-  }
-
-  handleTranscription(channel, handler) {
-    this.updateActivity ||= require("./updateActivity").createUpdateActivity(() => this.updateManager?.isInstalling);
-    ipcMain.handle(channel, this.updateActivity.wrap(handler));
   }
 
   deleteTranscriptionInternal(id) {
