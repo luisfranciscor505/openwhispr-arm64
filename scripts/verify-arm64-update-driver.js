@@ -1,6 +1,6 @@
 // Isolated transport fixture around the packaged updater. Only the HTTP source
 // is substituted: signed metadata, cache validation, manager and NSIS stay real.
-const { app } = require("electron");
+const { app, BrowserWindow } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert/strict");
@@ -18,6 +18,14 @@ Object.defineProperty(process, "resourcesPath", { value: path.dirname(appRoot) }
 app
   .whenReady()
   .then(async () => {
+    app.on("window-all-closed", () => {});
+    const preferences = new BrowserWindow({ show: false });
+    await preferences.loadFile(path.join(appRoot, "src", "dist", "index.html"));
+    await preferences.webContents.executeJavaScript(
+      "localStorage.setItem('arm64UpdateCycleSentinel', 'preserved'); localStorage.setItem('autoUpdatesEnabled', 'false')"
+    );
+    preferences.webContents.session.flushStorageData();
+    preferences.destroy();
     const { Arm64UpdateProvider } = require(
       path.join(appRoot, "src", "helpers", "arm64UpdateProvider")
     );

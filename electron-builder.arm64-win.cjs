@@ -15,6 +15,7 @@ process.env.ELECTRON_BUILDER_7Z_FILTER = "BCJ";
 
 module.exports = {
   ...shared,
+  ...(managed ? { buildVersion: `${release.upstreamTag.slice(1)}.${release.portRevision}` } : {}),
   extraMetadata: {
     ...shared.extraMetadata,
     windowsTrayIdentity: false,

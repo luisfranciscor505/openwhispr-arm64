@@ -25,6 +25,7 @@ fs.mkdirSync(path.join(temporaryHome, "profile"));
 fs.mkdirSync(path.join(temporaryHome, "appdata"));
 fs.mkdirSync(output, { recursive: true });
 app.setPath("userData", path.join(temporaryHome, "profile"));
+if (option("--profile-dir")) app.setPath("userData", path.resolve(option("--profile-dir")));
 app.setPath("appData", path.join(temporaryHome, "appdata"));
 app.setPath("home", temporaryHome);
 process.env.OPENWHISPR_CHANNEL = "production";
@@ -80,6 +81,10 @@ app.whenReady().then(async () => {
     const text = await window.webContents.executeJavaScript("document.body.innerText");
     const ipcVersion = await window.webContents.executeJavaScript("window.electronAPI.getAppVersion()");
     if (!ipcVersion?.version) throw new Error("Installed renderer/preload/main IPC failed");
+    if (process.argv.includes("--expect-cycle-sentinel")) {
+      const preserved = await window.webContents.executeJavaScript("localStorage.getItem('arm64UpdateCycleSentinel') === 'preserved' && localStorage.getItem('autoUpdatesEnabled') === 'false'");
+      if (!preserved) throw new Error("Renderer preferences were not preserved across installation");
+    }
     if (text.length < 50 || errors.length)
       throw new Error(`Startup failed: ${JSON.stringify(errors)} ${text}`);
     let processDetection;

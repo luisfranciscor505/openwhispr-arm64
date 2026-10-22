@@ -17,7 +17,10 @@ GitHub Actions' executable workflow directory.
 quality checks, then waits for the `snapdragon-npu` runner. It tests the exact
 installer in a dedicated account. The publication job checks source, run/attempt,
 installer bytes and required NPU/CPU/UI results before signing and publishing.
-Only a verified candidate PR is merged. Do not run contributor PRs on this runner.
+Only a verified candidate PR is merged. The runner's administrator-owned job hook
+refuses all jobs except this repository's release workflow dispatched from
+`arm64`, before checkout. External contributors also require workflow approval;
+never approve a contributor workflow for local execution.
 
 For a port-only fix, increment `portRevision` in `arm64-release.json`, merge the
 change to `arm64`, then dispatch the release workflow with candidate `arm64`.
@@ -73,6 +76,11 @@ with a new trust key; implicit key rotation is deliberately unsupported.
 If verification fails or the PC is offline, the last published release remains
 available. Inspect the workflow and restricted local runner logs. Public reports
 contain fixed-fixture outcomes and provenance, not screenshots or account paths.
+The first bootstrap release has no previous managed version to upgrade from.
+Every later release must additionally prove an installed A-to-B update using
+the packaged updater, authenticated candidate metadata and the real NSIS
+installer. The test substitutes transport with the already downloaded candidate;
+it checks renderer preferences and model bytes after installation and restart.
 Native/model pin changes are blocked in automatically imported candidates; make
 and validate those changes separately on the maintained branch.
 

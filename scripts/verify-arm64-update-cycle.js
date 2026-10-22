@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const assert = require("node:assert/strict");
 const { execFileSync } = require("node:child_process");
 const {
@@ -37,12 +38,16 @@ async function verifyCycle(candidate, work) {
   const run = (exe, args) =>
     execFileSync(exe, args, { windowsHide: true, stdio: "inherit", timeout: 300000 });
   run(installer, ["/S", `/D=${target}`]);
-  const profile = path.join(work, "upgrade-profile");
+  const profile = path.join(process.env.APPDATA, "open-whispr");
   fs.mkdirSync(profile, { recursive: true });
   const sentinel = path.join(profile, "settings-preservation.txt");
   fs.writeFileSync(sentinel, "arm64-upgrade-settings");
   const before = hash(sentinel);
-  const modelBefore = hash(path.join(process.env.OPENWHISPR_VERIFY_MODELS, "ggml-base.bin"));
+  const realModels = path.join(os.homedir(), ".cache", "openwhispr", "whisper-models");
+  fs.mkdirSync(realModels, { recursive: true });
+  const modelPath = path.join(realModels, "ggml-base.bin");
+  fs.copyFileSync(path.join(process.env.OPENWHISPR_VERIFY_MODELS, "ggml-base.bin"), modelPath);
+  const modelBefore = hash(modelPath);
   const status = path.join(work, "update-cycle.json");
   run(path.join(__dirname, "..", "node_modules", "electron", "dist", "electron.exe"), [
     path.join(__dirname, "verify-arm64-update-driver.js"),
@@ -69,7 +74,7 @@ async function verifyCycle(candidate, work) {
     "NSIS update did not install candidate version"
   );
   assert.equal(hash(sentinel), before);
-  assert.equal(hash(path.join(process.env.OPENWHISPR_VERIFY_MODELS, "ggml-base.bin")), modelBefore);
+  assert.equal(hash(modelPath), modelBefore);
   assert.equal(JSON.parse(fs.readFileSync(status)).authenticated, true);
   // Stop only this isolated restarted instance, never another user's app.
   const powershell = path.join(
@@ -91,6 +96,17 @@ async function verifyCycle(candidate, work) {
       env: { ...process.env, OPENWHISPR_UPGRADE_EXE: path.join(target, "OpenWhispr.exe") },
     }
   );
+  run(path.join(__dirname, "..", "node_modules", "electron", "dist", "electron.exe"), [
+    path.join(__dirname, "verify-windows-arm64-ui.js"),
+    "--installed",
+    "--install-dir",
+    target,
+    "--profile-dir",
+    profile,
+    "--expect-cycle-sentinel",
+    "--report-dir",
+    path.join(work, "upgrade-ui"),
+  ]);
   return { updateCycle: true, previousVersion: manifest.version, settingsAndModelsPreserved: true };
 }
 
