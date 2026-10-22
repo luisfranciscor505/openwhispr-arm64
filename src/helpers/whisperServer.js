@@ -312,6 +312,9 @@ class WhisperServerManager extends EventEmitter {
   }
 
   getFFmpegPath() {
+    if (process.platform === "win32" && process.arch === "arm64") {
+      return require("./ffmpegUtils").getFFmpegPath();
+    }
     if (this.cachedFFmpegPath) return this.cachedFFmpegPath;
 
     try {

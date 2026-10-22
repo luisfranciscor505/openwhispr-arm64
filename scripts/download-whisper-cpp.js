@@ -172,6 +172,8 @@ async function downloadAllBinaries(release, isForce, download = downloadBinary) 
 }
 
 async function main() {
+  const arm64 = require("./lib/windows-arm64-helpers");
+  if (arm64.isArm64Target()) return arm64.ensureSourceBinary("whisper-server-win32-arm64.exe");
   console.log(`\n[whisper-server] Using pinned version: ${WHISPER_CPP_TAG}`);
   const release = await getRelease();
 
@@ -233,7 +235,10 @@ async function main() {
 }
 
 if (require.main === module) {
-  main().catch(console.error);
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
 }
 
 module.exports = { BINARIES, WHISPER_CPP_TAG, downloadAllBinaries, isCompleteInstall };

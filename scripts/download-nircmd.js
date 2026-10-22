@@ -18,6 +18,7 @@ const BIN_DIR = path.join(__dirname, "..", "resources", "bin");
 const NIRCMD_PATH = path.join(BIN_DIR, "nircmd.exe");
 
 async function main() {
+  if (require("./lib/windows-arm64-helpers").isArm64Target()) return;
   // Skip if not Windows and not building for all platforms
   if (process.platform !== "win32" && !process.argv.includes("--all")) {
     console.log("\nSkipping nircmd.exe download (Windows-only utility)\n");

@@ -65,6 +65,8 @@ class LlamaCppInstaller {
       // Then check for local installation
       const binaryPath = this.getInstalledBinaryPath();
       await fsPromises.access(binaryPath, fs.constants.X_OK);
+      if (this.platform === "win32" && this.arch === "arm64")
+        require("./peArchitecture").assertPeArchitecture(binaryPath);
       this.binPath = binaryPath;
       return true;
     } catch {
@@ -94,7 +96,19 @@ class LlamaCppInstaller {
         proc.on("close", (code) => {
           if (!found && code === 0 && output) {
             found = true;
-            resolve(output.trim().split(/\r?\n/)[0]);
+            const candidates = output.trim().split(/\r?\n/);
+            if (this.platform === "win32" && this.arch === "arm64") {
+              resolve(
+                candidates.find((file) => {
+                  try {
+                    require("./peArchitecture").assertPeArchitecture(file);
+                    return true;
+                  } catch {
+                    return false;
+                  }
+                }) || null
+              );
+            } else resolve(candidates[0]);
           }
           remaining--;
           if (remaining === 0 && !found) {

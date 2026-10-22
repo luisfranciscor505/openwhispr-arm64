@@ -86,6 +86,8 @@ async function downloadTarget(target, release, force) {
 }
 
 async function main() {
+  const arm64 = require("./lib/windows-arm64-helpers");
+  if (arm64.isArm64Target()) return arm64.ensureSourceBinary("meeting-aec-helper-win32-arm64.exe");
   const args = parseArgs();
 
   const selected = args.isAll
@@ -125,4 +127,5 @@ async function main() {
 
 main().catch((error) => {
   console.error("[meeting-aec-helper] Unexpected error:", error.message);
+  process.exitCode = 1;
 });

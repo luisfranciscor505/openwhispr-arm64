@@ -8,6 +8,11 @@
     "node": ">=24"
   },
   "scripts": {
+    "prepare:win:arm64": "node scripts/prepare-windows-arm64.js",
+    "verify:win:arm64": "electron scripts/verify-windows-arm64.js",
+    "build:renderer:win:arm64": "node scripts/build-windows-arm64-renderer.js",
+    "build:win:arm64": "npm run prepare:win:arm64 && npm run build:renderer:win:arm64 && electron-builder --config electron-builder.arm64-win.cjs --win --arm64 --publish never",
+    "pack:win:arm64": "npm run prepare:win:arm64 && npm run build:renderer:win:arm64 && electron-builder --config electron-builder.arm64-win.cjs --win --arm64 --dir --publish never",
     "compile:globe": "node scripts/build-globe-listener.js",
     "compile:fast-paste": "node scripts/build-macos-fast-paste.js",
     "compile:winkeys": "node scripts/build-windows-key-listener.js",
@@ -22,7 +27,7 @@
     "compile:calendar-listener": "node scripts/build-macos-calendar-listener.js",
     "compile:audio-tap": "node scripts/build-macos-audio-tap.js",
     "compile:window-bounds": "node scripts/build-macos-window-bounds.js",
-    "compile:native": "npm run compile:globe && npm run compile:fast-paste && npm run compile:winkeys && npm run compile:linuxkeys && npm run compile:winpaste && npm run compile:linux-paste && npm run compile:linux-system-audio && npm run compile:text-monitor && npm run compile:media-remote && npm run compile:mediaremote-adapter && npm run compile:mic-listener && npm run compile:calendar-listener && npm run compile:audio-tap && npm run compile:window-bounds",
+    "compile:native": "node scripts/compile-native.js",
     "prestart": "npm run compile:native && npm run download:meeting-aec-helper && npm run download:sherpa-onnx && npm run download:yt-dlp && npm run download:qdrant && npm run download:embedding-model && npm run download:whisper-vad-model",
     "start": "electron .",
     "dev": "concurrently -k -r \"npm:dev:renderer\" \"npm:dev:main\"",
@@ -80,7 +85,8 @@
     "quality-check": "npm run format:check && npm run typecheck",
     "i18n:check": "node scripts/check-i18n.js",
     "preview": "cd src && vite preview",
-    "clean": "node cleanup.js"
+    "clean": "node cleanup.js",
+    "compile:native:platforms": "npm run compile:globe && npm run compile:fast-paste && npm run compile:winkeys && npm run compile:linuxkeys && npm run compile:winpaste && npm run compile:linux-paste && npm run compile:linux-system-audio && npm run compile:text-monitor && npm run compile:media-remote && npm run compile:mediaremote-adapter && npm run compile:mic-listener && npm run compile:calendar-listener && npm run compile:audio-tap && npm run compile:window-bounds"
   },
   "keywords": [
     "dictation",
@@ -172,7 +178,6 @@
     "clsx": "^2.1.1",
     "dotenv": "^17.4.1",
     "electron-updater": "^6.6.2",
-    "ffmpeg-static": "^5.2.0",
     "flatted": "^3.4.4",
     "i18next": "^26.3.6",
     "kysely": "^0.28.17",
@@ -196,6 +201,9 @@
     "ws": "8.21.0",
     "zod": "^4.3.6",
     "zustand": "^5.0.11"
+  },
+  "optionalDependencies": {
+    "ffmpeg-static": "^5.2.0"
   },
   "overrides": {
     "adm-zip": "^0.6.1",

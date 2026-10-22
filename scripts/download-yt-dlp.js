@@ -11,6 +11,11 @@ const GITHUB_RELEASE_URL = `https://github.com/yt-dlp/yt-dlp/releases/download/$
 // macOS asset is universal2 and serves both arm64 and x64. sha256 values are pinned
 // from the release's SHA2-256SUMS — release assets are mutable, tags aren't enough.
 const BINARIES = {
+  "win32-arm64": {
+    assetName: "yt-dlp_arm64.exe",
+    outputName: "yt-dlp-win32-arm64.exe",
+    sha256: "1525690b037ecc0bb677e38e7147b0025179cbc9a8d0c57264e3100b18099280",
+  },
   "darwin-arm64": {
     assetName: "yt-dlp_macos",
     outputName: "yt-dlp-darwin-arm64",

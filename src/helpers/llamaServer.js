@@ -140,7 +140,8 @@ class LlamaServerManager {
           LLAMA_VULKAN_BIN_SUBDIR,
           vulkanName
         );
-        if (fs.existsSync(vulkanPath)) vulkanBin = vulkanPath;
+        if (!(platform === "win32" && arch === "arm64") && fs.existsSync(vulkanPath))
+          vulkanBin = vulkanPath;
       } catch {}
 
       const cpuBin =

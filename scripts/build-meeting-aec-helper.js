@@ -42,7 +42,7 @@ const binaryName = `meeting-aec-helper-${process.platform}-${targetArch}${
 const outputBinary = path.join(outputDir, binaryName);
 const builtBinary = path.join(
   buildDir,
-  process.platform === "win32" ? "Release" : "",
+  process.platform === "win32" && targetArch !== "arm64" ? "Release" : "",
   `meeting-aec-helper${process.platform === "win32" ? ".exe" : ""}`
 );
 const hashFile = path.join(outputDir, `.meeting-aec-helper.${process.platform}-${targetArch}.hash`);
@@ -199,7 +199,18 @@ function configureCMake(cmakeManifestPath) {
     args.push(`-DCMAKE_OSX_ARCHITECTURES=${getDarwinArch()}`);
   }
 
-  if (process.platform === "win32" && targetArch === "x64") {
+  if (process.platform === "win32" && targetArch === "arm64") {
+    if (!process.env.VCToolsInstallDir)
+      throw new Error("Run in a Visual Studio ARM64 build environment");
+    const clang = path.resolve(process.env.VCToolsInstallDir, "../../Llvm/ARM64/bin/clang-cl.exe");
+    args.push(
+      "-G",
+      "Ninja",
+      `-DCMAKE_C_COMPILER=${clang}`,
+      `-DCMAKE_CXX_COMPILER=${clang}`,
+      "-DCMAKE_SYSTEM_PROCESSOR=ARM64"
+    );
+  } else if (process.platform === "win32") {
     args.push("-A", "x64", "-T", "ClangCL");
   }
 

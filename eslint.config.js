@@ -5,6 +5,8 @@ module.exports = [
   {
     ignores: [
       "dist/**",
+      "dist-arm64/**",
+      ".cache/**", // downloaded upstream source and generated native build files
       "node_modules/**",
       "src/dist/**",
       "*.min.js",

@@ -145,6 +145,7 @@ class MediaPlayer {
   }
 
   _resolveNircmd() {
+    if (process.platform === "win32" && process.arch === "arm64") return null;
     if (this._nircmdChecked) return this._nircmdPath;
     this._nircmdChecked = true;
 

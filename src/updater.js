@@ -2,7 +2,9 @@ const { autoUpdater } = require("electron-updater");
 
 // electron-updater can only replace an AppImage on Linux; deb, rpm and tar.gz
 // installs are updated by the package manager instead.
-const isUpdaterSupported = process.platform !== "linux" || Boolean(process.env.APPIMAGE);
+const isLocalArm64Build = require("../package.json").localArm64Build === true;
+const isUpdaterSupported =
+  !isLocalArm64Build && (process.platform !== "linux" || Boolean(process.env.APPIMAGE));
 
 class UpdateManager {
   constructor() {
@@ -27,6 +29,7 @@ class UpdateManager {
   }
 
   setupAutoUpdater() {
+    if (isLocalArm64Build) return;
     if (process.env.NODE_ENV === "development") {
       return;
     }
@@ -168,7 +171,9 @@ class UpdateManager {
       if (!isUpdaterSupported) {
         return {
           updateAvailable: false,
-          message: "Updates are installed through the system package manager",
+          message: isLocalArm64Build
+            ? "Updates are disabled for this local ARM64 build"
+            : "Updates are installed through the system package manager",
         };
       }
 
@@ -198,6 +203,8 @@ class UpdateManager {
   }
 
   async downloadUpdate() {
+    if (isLocalArm64Build)
+      return { success: false, message: "Updates are disabled for this local ARM64 build" };
     try {
       if (process.env.NODE_ENV === "development") {
         return {
@@ -234,6 +241,8 @@ class UpdateManager {
   }
 
   async installUpdate() {
+    if (isLocalArm64Build)
+      return { success: false, message: "Updates are disabled for this local ARM64 build" };
     try {
       if (process.env.NODE_ENV === "development") {
         return {

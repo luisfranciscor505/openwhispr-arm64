@@ -12,12 +12,14 @@ const modulePath = require.resolve("../../src/helpers/mediaPlayer");
 const processUtilPath = require.resolve("../../src/utils/process");
 const originalLoad = Module._load;
 const originalPlatform = process.platform;
+const originalArch = process.arch;
 
 function setPlatform(platform) {
   Object.defineProperty(process, "platform", { value: platform, configurable: true });
 }
 test.afterEach(() => {
   setPlatform(originalPlatform);
+  Object.defineProperty(process, "arch", { value: originalArch, configurable: true });
   Module._load = originalLoad;
 });
 
@@ -73,7 +75,11 @@ function createFakeChild() {
 // test rather than just the initial require, so a call added inside a function
 // is caught too, and it only answers requires made by the two modules under
 // test, so node:test's own requires are untouched.
-function loadMediaPlayer(platform, { existingPaths = () => false, warnThrows = false } = {}) {
+function loadMediaPlayer(
+  platform,
+  { existingPaths = () => false, warnThrows = false, arch = "x64" } = {}
+) {
+  Object.defineProperty(process, "arch", { value: arch, configurable: true });
   delete require.cache[modulePath];
   delete require.cache[processUtilPath];
   setPlatform(platform);
@@ -202,6 +208,20 @@ test("win32: bundled nircmd is tried before the PowerShell media key", async () 
   assert.deepEqual(nircmd.args, ["sendkeypress", "0xB3"]);
   nircmd.child.finish(0);
 
+  assert.equal(await pausing, true);
+  assert.equal(calls.length, 2);
+});
+
+test("win32 ARM64: skips x64 nircmd and uses PowerShell", async () => {
+  const { mediaPlayer, calls } = loadMediaPlayer("win32", {
+    arch: "arm64",
+    existingPaths: (p) => /nircmd\.exe$/.test(p),
+  });
+  const pausing = mediaPlayer.pauseMedia();
+  (await waitForCall(calls, 0)).child.finish(1);
+  const fallback = await waitForCall(calls, 1);
+  assert.equal(fallback.cmd, "powershell.exe");
+  fallback.child.finish(0);
   assert.equal(await pausing, true);
   assert.equal(calls.length, 2);
 });

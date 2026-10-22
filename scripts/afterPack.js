@@ -272,11 +272,10 @@ function verifyUnpackedBinaries(context) {
 
   const isWindows = context.electronPlatformName === "win32";
 
-  const ffmpegPath = path.join(
-    unpackedModulesDir,
-    "ffmpeg-static",
-    isWindows ? "ffmpeg.exe" : "ffmpeg"
-  );
+  const isWindowsArm64 = isWindows && Arch[context.arch] === "arm64";
+  const ffmpegPath = isWindowsArm64
+    ? path.join(resolveResourcesDir(context), "bin", "ffmpeg-win32-arm64.exe")
+    : path.join(unpackedModulesDir, "ffmpeg-static", isWindows ? "ffmpeg.exe" : "ffmpeg");
   if (!fs.existsSync(ffmpegPath)) {
     throw new Error(
       `afterPack: missing ${ffmpegPath} — ffmpeg-static was not unpacked from app.asar (asarUnpack/packaging failure); the packed app cannot spawn FFmpeg`
@@ -297,7 +296,7 @@ function verifyUnpackedBinaries(context) {
     const hasFastlist =
       fs.existsSync(psListVendorDir) &&
       fs.readdirSync(psListVendorDir).some((name) => /^fastlist-.*\.exe$/.test(name));
-    if (!hasFastlist) {
+    if (!hasFastlist && !isWindowsArm64) {
       throw new Error(
         `afterPack: no fastlist-*.exe in ${psListVendorDir} — ps-list vendor executable was not unpacked from app.asar (asarUnpack/packaging failure); Windows process detection would break`
       );
@@ -316,6 +315,24 @@ function verifyUnpackedBinaries(context) {
 
 exports.default = async function (context) {
   stripOnnxruntimeBinaries(context);
+  if (context.electronPlatformName === "win32" && Arch[context.arch] === "arm64") {
+    const binDir = path.join(resolveResourcesDir(context), "bin");
+    for (const file of fs
+      .readdirSync(binDir)
+      .filter((name) => /^(msvcp140|vcruntime140|concrt140).*\.dll$/i.test(name))) {
+      fs.copyFileSync(path.join(binDir, file), path.join(context.appOutDir, file));
+    }
+    const vendor = path.join(
+      resolveResourcesDir(context),
+      "app.asar.unpacked",
+      "node_modules",
+      "ps-list",
+      "vendor"
+    );
+    fs.rmSync(vendor, { recursive: true, force: true });
+    const { validateArm64Package } = require("./lib/validate-arm64-package");
+    validateArm64Package(context.appOutDir);
+  }
   wrapLinuxBinary(context);
   verifyMeetingAecHelper(context);
   verifyUnpackedBinaries(context);

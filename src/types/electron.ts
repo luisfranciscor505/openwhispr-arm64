@@ -1,4 +1,15 @@
 import type { ModelDefinition } from "../models/ModelRegistry";
+
+export interface WhisperNpuStatus {
+  supported: boolean;
+  downloaded: boolean;
+  available: boolean;
+  preference: "automatic" | "npu" | "cpu";
+  backend: "qnn-htp" | "cpu" | null;
+  unavailableReason: string | null;
+  model: string;
+  profileDir: string;
+}
 import type { ReasoningConfig } from "../services/BaseReasoningService";
 import type { PermissionGuideState, PermissionGuideAction } from "./permissionGuide";
 import type { TinfoilCatalogModel } from "../models/tinfoilModels";
@@ -2014,6 +2025,10 @@ declare global {
       ) => () => void;
       checkModelStatus: (modelName: string) => Promise<WhisperModelResult>;
       listWhisperModels: () => Promise<WhisperModelsListResult>;
+      getWhisperNpuStatus: (probe?: boolean) => Promise<WhisperNpuStatus>;
+      setWhisperNpuPreference: (
+        preference: "automatic" | "npu" | "cpu"
+      ) => Promise<WhisperNpuStatus>;
       deleteWhisperModel: (modelName: string) => Promise<WhisperModelDeleteResult>;
       deleteAllWhisperModels: () => Promise<{
         success: boolean;
@@ -2256,6 +2271,7 @@ declare global {
       snapToMeetingMode: () => Promise<void>;
       restoreFromMeetingMode: () => Promise<void>;
       getPlatform: () => string;
+      getArch: () => string;
       startWindowDrag: () => Promise<void>;
       stopWindowDrag: () => Promise<void>;
       startControlPanelDrag: () => Promise<void>;
@@ -3177,7 +3193,12 @@ declare global {
       >;
 
       // Google Calendar
-      gcalStartOAuth?: () => Promise<{ success: boolean; email?: string; error?: string }>;
+      gcalStartOAuth?: () => Promise<{
+        success: boolean;
+        email?: string;
+        error?: string;
+        errorCode?: string;
+      }>;
       gcalDisconnect?: (email?: string) => Promise<{ success: boolean; error?: string }>;
       gcalGetConnectionStatus?: () => Promise<{
         connected: boolean;

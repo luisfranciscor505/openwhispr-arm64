@@ -27,8 +27,28 @@ class ProcessListCache {
 
   async _fetch(now) {
     try {
-      const psList = (await import("ps-list")).default;
-      const procs = await psList();
+      let procs;
+      if (process.platform === "win32" && process.arch === "arm64") {
+        const { resolveBinaryPath } = require("../utils/serverUtils");
+        const { assertPeArchitecture } = require("./peArchitecture");
+        const { execFile } = require("child_process");
+        const { promisify } = require("util");
+        const binary = resolveBinaryPath("windows-process-list.exe");
+        if (!binary) throw new Error("ARM64 process-list helper is missing");
+        assertPeArchitecture(binary);
+        const { stdout } = await promisify(execFile)(binary, [], {
+          windowsHide: true,
+          timeout: 5000,
+          encoding: "utf8",
+        });
+        procs = stdout
+          .split(/\r?\n/)
+          .filter(Boolean)
+          .map((name) => ({ name }));
+      } else {
+        const psList = (await import("ps-list")).default;
+        procs = await psList();
+      }
       const names = procs.map((p) => (p.name || "").toLowerCase());
       this._cache = names;
       this._cacheTime = now;

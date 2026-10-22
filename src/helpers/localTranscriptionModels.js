@@ -12,12 +12,15 @@ function listLocalTranscriptionModels({ whisperManager, parakeetManager, env = p
   const isDefault = (provider, model) =>
     provider === configuredProvider && model === configuredModel;
 
-  const whisper = Object.keys(modelRegistryData.whisperModels).map((model) => ({
-    provider: "whisper",
-    model,
-    downloaded: whisperManager.isModelDownloaded(model),
-    default: isDefault("whisper", model),
-  }));
+  const { MODEL_ID, isSupported } = require("./whisperNpu");
+  const whisper = Object.keys(modelRegistryData.whisperModels)
+    .filter((model) => model !== MODEL_ID || isSupported())
+    .map((model) => ({
+      provider: "whisper",
+      model,
+      downloaded: whisperManager.isModelDownloaded(model),
+      default: isDefault("whisper", model),
+    }));
   const sherpa = Object.keys(modelRegistryData.parakeetModels).map((model) => {
     const provider = getModelType(model) === "cohere-transcribe" ? "cohere" : "nvidia";
     return {

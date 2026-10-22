@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 const fs = require("fs");
+const crypto = require("crypto");
 const path = require("path");
 const {
   copyLibraries,
@@ -19,6 +20,14 @@ const LLAMA_CPP_REPO = "ggml-org/llama.cpp";
 const LLAMA_CPP_TAG = process.env.LLAMA_CPP_VERSION || "b9763";
 
 const BINARIES = {
+  "win32-arm64-cpu": {
+    platformArch: "win32-arm64",
+    assetPattern: /^llama-.*-bin-win-cpu-arm64\.zip$/,
+    binaryPath: "llama-server.exe",
+    outputName: "llama-server-win32-arm64-cpu.exe",
+    sha256: "c8c3e710e67e87ab9b6a2eeb106cde4f853825ad40d435586827ca3b63cca971",
+    libPattern: "*.dll",
+  },
   "darwin-arm64": {
     platformArch: "darwin-arm64",
     assetPattern: /^llama-.*-bin-macos-arm64\.tar\.gz$/,
@@ -88,6 +97,11 @@ async function downloadBinary(key, config, release, isForce = false) {
 
   try {
     await downloadFile(asset.url, zipPath);
+    if (
+      config.sha256 &&
+      crypto.createHash("sha256").update(fs.readFileSync(zipPath)).digest("hex") !== config.sha256
+    )
+      throw new Error("llama.cpp archive checksum mismatch");
 
     const extractDir = path.join(BIN_DIR, `temp-llama-${key}`);
     fs.mkdirSync(extractDir, { recursive: true });

@@ -431,6 +431,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onWhisperDownloadProgress: registerListener("whisper-download-progress"),
   checkModelStatus: (modelName) => ipcRenderer.invoke("check-model-status", modelName),
   listWhisperModels: () => ipcRenderer.invoke("list-whisper-models"),
+  getWhisperNpuStatus: (probe = false) => ipcRenderer.invoke("whisper-npu-status", probe),
+  setWhisperNpuPreference: (preference) => ipcRenderer.invoke("whisper-npu-preference", preference),
   deleteWhisperModel: (modelName) => ipcRenderer.invoke("delete-whisper-model", modelName),
   deleteAllWhisperModels: () => ipcRenderer.invoke("delete-all-whisper-models"),
   cancelWhisperDownload: () => ipcRenderer.invoke("cancel-whisper-download"),
@@ -544,6 +546,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   snapToMeetingMode: () => ipcRenderer.invoke("snap-to-meeting-mode"),
   restoreFromMeetingMode: () => ipcRenderer.invoke("restore-from-meeting-mode"),
   getPlatform: () => process.platform,
+  getArch: () => process.arch,
 
   // Cleanup function
   cleanupApp: () => ipcRenderer.invoke("cleanup-app"),

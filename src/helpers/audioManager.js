@@ -2521,6 +2521,9 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
             rawText,
             source: "local",
             timings,
+            ...(result.backend ? { backend: result.backend } : {}),
+            ...(result.fallbackReason ? { fallbackReason: result.fallbackReason } : {}),
+            ...(result.warning ? { warning: result.warning } : {}),
             ...(metadata.rawWav ? { decodedRawWav: true } : {}),
           };
         } else {

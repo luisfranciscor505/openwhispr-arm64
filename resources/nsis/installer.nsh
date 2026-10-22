@@ -27,7 +27,12 @@
 
 !macro customInstall
   nsExec::ExecToLog 'netsh advfirewall firewall delete rule name="${SHERPA_FIREWALL_RULE}"'
-  nsExec::ExecToLog 'netsh advfirewall firewall add rule name="${SHERPA_FIREWALL_RULE}" dir=in action=block program="$INSTDIR\resources\bin\sherpa-onnx-ws-win32-x64.exe" enable=yes profile=any'
+  IfFileExists "$INSTDIR\resources\bin\sherpa-onnx-ws-win32-arm64.exe" 0 sherpa_x64
+    nsExec::ExecToLog 'netsh advfirewall firewall add rule name="${SHERPA_FIREWALL_RULE}" dir=in action=block program="$INSTDIR\resources\bin\sherpa-onnx-ws-win32-arm64.exe" enable=yes profile=any'
+    Goto sherpa_firewall_done
+  sherpa_x64:
+    nsExec::ExecToLog 'netsh advfirewall firewall add rule name="${SHERPA_FIREWALL_RULE}" dir=in action=block program="$INSTDIR\resources\bin\sherpa-onnx-ws-win32-x64.exe" enable=yes profile=any'
+  sherpa_firewall_done:
 !macroend
 
 !macro customUnInstall

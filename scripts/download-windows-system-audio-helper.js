@@ -30,6 +30,8 @@ const VERSION_OVERRIDE = process.env.WINDOWS_SYSTEM_AUDIO_HELPER_VERSION || null
 const BIN_DIR = path.join(__dirname, "..", "resources", "bin");
 
 async function main() {
+  const arm64 = require("./lib/windows-arm64-helpers");
+  if (arm64.isArm64Target()) return arm64.ensureHelpers();
   // Only needed on Windows
   if (process.platform !== "win32") {
     console.log("[windows-system-audio-helper] Skipping download (not Windows)");

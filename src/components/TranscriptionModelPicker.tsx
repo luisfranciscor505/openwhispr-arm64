@@ -58,6 +58,7 @@ import { getCachedPlatform } from "../utils/platform";
 import { pickWhisperGpuBackend } from "../utils/whisperGpuPack";
 import logger from "../utils/logger";
 import type { ParakeetCheckResult } from "../types/electron";
+import { NpuAccelerationSettings } from "./NpuAccelerationSettings";
 
 interface LocalModel {
   model: string;
@@ -1265,45 +1266,52 @@ export default function TranscriptionModelPicker({
 
     return (
       <div className="space-y-0.5">
-        {modelsToRender.map((model) => {
-          const modelId = model.model;
-          const info = WHISPER_MODEL_INFO[modelId] ?? {
-            name: modelId,
-            description: t("transcription.fallback.whisperModelDescription"),
-            size: t("common.unknown"),
-            recommended: false,
-          };
+        {selectedLocalModel === "base-snapdragon-npu" && <NpuAccelerationSettings />}
+        {modelsToRender
+          .filter(
+            (model) =>
+              model.model !== "base-snapdragon-npu" ||
+              (getCachedPlatform() === "win32" && window.electronAPI?.getArch?.() === "arm64")
+          )
+          .map((model) => {
+            const modelId = model.model;
+            const info = WHISPER_MODEL_INFO[modelId] ?? {
+              name: modelId,
+              description: t("transcription.fallback.whisperModelDescription"),
+              size: t("common.unknown"),
+              recommended: false,
+            };
 
-          return (
-            <LocalModelCard
-              key={modelId}
-              modelId={modelId}
-              name={info.name}
-              description={info.description}
-              size={info.size}
-              actualSizeMb={model.size_mb}
-              isSelected={modelId === selectedLocalModel}
-              isDownloaded={model.downloaded ?? false}
-              isDownloading={isDownloadingModel(modelId)}
-              isCancelling={isCancellingModel(modelId)}
-              isInstalling={whisperDownloads[modelId]?.phase === "installing"}
-              recommended={info.recommended}
-              provider="whisper"
-              onSelect={() => handleWhisperModelSelect(modelId)}
-              onDelete={() => handleDelete(modelId)}
-              onDownload={() =>
-                downloadModel(modelId, (downloadedId) => {
-                  setLocalModels((prev) =>
-                    prev.map((m) => (m.model === downloadedId ? { ...m, downloaded: true } : m))
-                  );
-                  handleWhisperModelSelect(downloadedId);
-                })
-              }
-              onCancel={() => cancelDownload(modelId)}
-              styles={styles}
-            />
-          );
-        })}
+            return (
+              <LocalModelCard
+                key={modelId}
+                modelId={modelId}
+                name={info.name}
+                description={info.description}
+                size={info.size}
+                actualSizeMb={model.size_mb}
+                isSelected={modelId === selectedLocalModel}
+                isDownloaded={model.downloaded ?? false}
+                isDownloading={isDownloadingModel(modelId)}
+                isCancelling={isCancellingModel(modelId)}
+                isInstalling={whisperDownloads[modelId]?.phase === "installing"}
+                recommended={info.recommended}
+                provider="whisper"
+                onSelect={() => handleWhisperModelSelect(modelId)}
+                onDelete={() => handleDelete(modelId)}
+                onDownload={() =>
+                  downloadModel(modelId, (downloadedId) => {
+                    setLocalModels((prev) =>
+                      prev.map((m) => (m.model === downloadedId ? { ...m, downloaded: true } : m))
+                    );
+                    handleWhisperModelSelect(downloadedId);
+                  })
+                }
+                onCancel={() => cancelDownload(modelId)}
+                styles={styles}
+              />
+            );
+          })}
       </div>
     );
   };

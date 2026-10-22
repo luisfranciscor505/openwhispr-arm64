@@ -10,6 +10,20 @@ let cachedFFmpegPath = null;
 function getFFmpegPath() {
   if (cachedFFmpegPath) return cachedFFmpegPath;
 
+  if (process.platform === "win32" && process.arch === "arm64") {
+    const { assertPeArchitecture } = require("./peArchitecture");
+    const candidates = [
+      ...(process.resourcesPath
+        ? [path.join(process.resourcesPath, "bin", "ffmpeg-win32-arm64.exe")]
+        : []),
+      path.join(__dirname, "..", "..", "resources", "bin", "ffmpeg-win32-arm64.exe"),
+    ];
+    const bundled = candidates.find((candidate) => fs.existsSync(candidate));
+    if (!bundled) throw new Error("Native ARM64 FFmpeg is missing. Run npm run prepare:win:arm64.");
+    cachedFFmpegPath = assertPeArchitecture(bundled, "arm64");
+    return cachedFFmpegPath;
+  }
+
   try {
     let ffmpegPath = require("ffmpeg-static");
     ffmpegPath = path.normalize(ffmpegPath);

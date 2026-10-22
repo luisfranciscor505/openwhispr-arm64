@@ -4137,7 +4137,8 @@
       "systemAudioDescription": "To transcribe meetings, OpenWhispr needs the System Audio permission to capture other participants' audio. We never record your screen. You'll be taken to System Settings to enable it.",
       "openSettings": "Open System Settings",
       "connectFailed": "Connection Failed",
-      "connectFailedDescription": "Something went wrong while connecting Google Calendar. Please try again."
+      "connectFailedDescription": "Something went wrong while connecting Google Calendar. Please try again.",
+      "notConfiguredDescription": "Google Calendar is not configured in this local build. Add Google Desktop OAuth client credentials to the app configuration and restart OpenWhispr. See docs/google-calendar-local-build.md in the source project."
     },
     "microsoftCalendar": {
       "title": "Microsoft Calendar",

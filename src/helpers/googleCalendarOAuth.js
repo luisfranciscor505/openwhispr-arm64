@@ -20,6 +20,14 @@ class GoogleCalendarOAuth {
   }
 
   startOAuthFlow() {
+    if (!this.getClientId()?.trim() || !this.getClientSecret()?.trim()) {
+      throw Object.assign(
+        new Error(
+          "Google Calendar is not configured in this local build. Configure a Google Desktop OAuth client with GOOGLE_CALENDAR_CLIENT_ID and GOOGLE_CALENDAR_CLIENT_SECRET, then restart OpenWhispr."
+        ),
+        { code: "google_calendar_not_configured" }
+      );
+    }
     return runOAuthLoopbackFlow({
       errorParam: "gcal_error",
       buildAuthUrl: (redirectUri, state, codeChallenge) => {

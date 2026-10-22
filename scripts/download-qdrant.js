@@ -122,6 +122,8 @@ async function downloadBinary(platformArch, config, release, isForce = false) {
 }
 
 async function main() {
+  const arm64 = require("./lib/windows-arm64-helpers");
+  if (arm64.isArm64Target()) return arm64.ensureSourceBinary("qdrant-win32-arm64.exe");
   if (VERSION_OVERRIDE) {
     console.log(`\n[qdrant] Using pinned version: ${VERSION_OVERRIDE}`);
   } else {
@@ -187,4 +189,7 @@ async function main() {
   }
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

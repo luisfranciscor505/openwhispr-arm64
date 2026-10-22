@@ -1,0 +1,17 @@
+{
+  "id": "base-snapdragon-npu",
+  "version": "0.65.0",
+  "chipset": "qualcomm-snapdragon-x-elite",
+  "compatibleHardware": "Snapdragon X Plus / X Elite (requires successful inference probe)",
+  "runtimeVersion": "1.30.0",
+  "qnnPackageVersion": "2.6.0",
+  "qairtVersion": "2.50.0.260828221209",
+  "url": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/whisper_base/releases/v0.65.0/whisper_base-precompiled_qnn_onnx-float-qualcomm_snapdragon_x_elite.zip",
+  "sha256": "9e3330fed98017750923d95ef96fb70fe34a318e214fa40c520cee6d81686fc2",
+  "size": 180670140,
+  "directory": "whisper_base-precompiled_qnn_onnx-float-qualcomm_snapdragon_x_elite",
+  "tokenizerUrl": "https://huggingface.co/openai/whisper-base/resolve/e37978b90ca9030d5170a5c07aadb050351a65bb/tokenizer.json",
+  "tokenizerSha256": "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566",
+  "licenseUrl": "https://huggingface.co/qualcomm/Whisper-Base/resolve/0a4aafa5bd2ec25466c45ee64f521a484b0917a8/LICENSE",
+  "licenseSha256": "0650e5f2f2072a41aa47aef7f4f28653a946d1c7347ca9e9e7cba3e05b585460"
+}

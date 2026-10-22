@@ -12,6 +12,11 @@ const {
   checkDiskSpace,
 } = require("./downloadUtils");
 const WhisperServerManager = require("./whisperServer");
+const {
+  WhisperNpuManager,
+  MODEL_ID: NPU_MODEL_ID,
+  isSupported: isNpuSupported,
+} = require("./whisperNpu");
 const { createAbortError } = require("./abortError");
 const {
   getCacheRoot,
@@ -34,7 +39,9 @@ function getWhisperModelConfig(modelName) {
 }
 
 function getValidModelNames() {
-  return Object.keys(modelRegistryData.whisperModels);
+  return Object.keys(modelRegistryData.whisperModels).filter(
+    (model) => model !== NPU_MODEL_ID || isNpuSupported()
+  );
 }
 
 // whisper-server reads its arguments in the Windows ANSI code page and crashes
@@ -101,6 +108,7 @@ class WhisperManager {
     this.isInitialized = false;
     // Server manager for HTTP-based transcription
     this.serverManager = new WhisperServerManager();
+    this.npuManager = new WhisperNpuManager(() => this.getModelsDir());
     this.currentServerModel = null;
     this.cachedVadModelPath = undefined;
     this._transcribing = false;
@@ -233,6 +241,8 @@ class WhisperManager {
   }
 
   isModelDownloaded(modelName) {
+    if (modelName === NPU_MODEL_ID)
+      return isNpuSupported() && this.npuManager.isDownloaded() && this.isModelDownloaded("base");
     return fs.existsSync(this.getModelPath(modelName));
   }
 
@@ -255,6 +265,14 @@ class WhisperManager {
   }
 
   async initializeAtStartup(settings = {}) {
+    if (
+      settings.localTranscriptionProvider === "whisper" &&
+      settings.whisperModel === NPU_MODEL_ID
+    ) {
+      this.isInitialized = true;
+      await this.startServer(NPU_MODEL_ID);
+      return;
+    }
     const startTime = Date.now();
 
     try {
@@ -387,6 +405,17 @@ class WhisperManager {
   }
 
   async startServer(modelName, options = {}) {
+    if (modelName === NPU_MODEL_ID) {
+      if (this.npuManager.preference === "cpu")
+        return this.startServer("base", { ...options, useCuda: false, useVulkan: false });
+      const status = await this.npuManager.probe();
+      this.currentServerModel = modelName;
+      return {
+        success: status.available || this.npuManager.preference === "automatic",
+        reason: status.unavailableReason,
+        backend: status.backend,
+      };
+    }
     if (!this.serverManager.isAvailable()) {
       return { success: false, reason: "whisper-server binary not found" };
     }
@@ -411,6 +440,7 @@ class WhisperManager {
   }
 
   async stopServer() {
+    await this.npuManager.stop();
     await this.serverManager.stop();
     this.currentServerModel = null;
   }
@@ -470,6 +500,42 @@ class WhisperManager {
   }
 
   async transcribeLocalWhisper(audioBlob, options = {}) {
+    if (options.model === NPU_MODEL_ID) {
+      const preference = this.npuManager.preference;
+      let fallbackReason = null;
+      if (preference !== "cpu") {
+        try {
+          return await this.npuManager.transcribe(audioBlob, {
+            ...options,
+            vadModelPath: options.vadEnabled === true ? this.getVadModelPath() : null,
+          });
+        } catch (error) {
+          if (options.signal?.aborted || error.name === "AbortError" || error.isAbort) throw error;
+          this.npuManager.unavailableReason = error.message;
+          if (preference === "npu") throw error;
+          fallbackReason = error.message;
+          debugLogger.warn("NPU transcription failed; retrying with ARM64 CPU", {
+            error: error.message,
+          });
+        }
+      }
+      // This branch runs once. It never re-enters automatic selection.
+      const result = await this.transcribeViaServer(
+        audioBlob,
+        "base",
+        options.language,
+        options.initialPrompt,
+        { ...options, forceCpu: true }
+      );
+      this.npuManager.activeBackend = "cpu";
+      return {
+        ...result,
+        backend: "cpu",
+        ...(fallbackReason
+          ? { fallbackReason, warning: `NPU unavailable; used ARM64 CPU: ${fallbackReason}` }
+          : {}),
+      };
+    }
     debugLogger.logWhisperPipeline("transcribeLocalWhisper - start", {
       options,
       audioBlobType: audioBlob?.constructor?.name,
@@ -505,6 +571,8 @@ class WhisperManager {
   }
 
   async transcribeViaServer(audioBlob, model, language, initialPrompt = null, options = {}) {
+    if (model === NPU_MODEL_ID)
+      return this.transcribeLocalWhisper(audioBlob, { ...options, model, language, initialPrompt });
     // Mark the server busy so a wake re-warm doesn't kill an in-flight dictation. See #766.
     this._transcribing = true;
     try {
@@ -532,6 +600,7 @@ class WhisperManager {
     this._warnIfGpuFallback();
     await this.serverManager.start(modelPath, {
       ...this.resolveGpuStartOptions(),
+      ...(options.forceCpu ? { useCuda: false, useVulkan: false } : {}),
       vadEnabled,
       vadModelPath,
       vadConfig: options.vadConfig || null,
@@ -694,6 +763,24 @@ class WhisperManager {
   }
 
   async downloadWhisperModel(modelName, progressCallback = null) {
+    if (modelName === NPU_MODEL_ID) {
+      // Base GGML is installed alongside the NPU pack for offline CPU fallback.
+      await this.downloadWhisperModel("base", (progress) =>
+        progressCallback?.({
+          ...progress,
+          model: NPU_MODEL_ID,
+          type: "progress",
+          percentage: Math.floor((progress.percentage || 0) * 0.4),
+        })
+      );
+      await this.npuManager.download((progress) =>
+        progressCallback?.({
+          ...progress,
+          percentage: 40 + Math.floor((progress.percentage || 0) * 0.6),
+        })
+      );
+      return this.checkModelStatus(NPU_MODEL_ID);
+    }
     this.validateModelName(modelName);
     const modelConfig = getWhisperModelConfig(modelName);
 
@@ -790,6 +877,10 @@ class WhisperManager {
   }
 
   async cancelDownload() {
+    if (this.npuManager.downloadController) {
+      this.npuManager.cancelDownload();
+      return { success: true, message: "Download cancelled" };
+    }
     if (this.currentDownloadProcess) {
       this.currentDownloadProcess.abort();
       return { success: true, message: "Download cancelled" };
@@ -798,6 +889,25 @@ class WhisperManager {
   }
 
   async checkModelStatus(modelName) {
+    if (modelName === NPU_MODEL_ID) {
+      const downloaded = this.npuManager.isDownloaded() && this.isModelDownloaded("base");
+      const bytes = downloaded
+        ? fs
+            .readdirSync(this.npuManager.modelDir)
+            .reduce(
+              (total, name) => total + fs.statSync(path.join(this.npuManager.modelDir, name)).size,
+              fs.statSync(this.getModelPath("base")).size
+            )
+        : 0;
+      return {
+        success: true,
+        model: modelName,
+        downloaded,
+        size_bytes: bytes,
+        size_mb: bytes ? Math.round(bytes / 1048576) : 320,
+        isDownloading: !!this.npuManager.downloadController,
+      };
+    }
     const modelPath = this.getModelPath(modelName);
     const activeDownload = this.currentDownloadProcess?.model === modelName;
     const downloadStatus = {
@@ -841,6 +951,11 @@ class WhisperManager {
   }
 
   async deleteWhisperModel(modelName) {
+    if (modelName === NPU_MODEL_ID) {
+      await this.npuManager.stop();
+      await fsPromises.rm(this.npuManager.modelDir, { recursive: true, force: true });
+      return { success: true, model: modelName, deleted: true };
+    }
     const modelPath = this.getModelPath(modelName);
 
     if (fs.existsSync(modelPath)) {
@@ -859,6 +974,7 @@ class WhisperManager {
   }
 
   async deleteAllWhisperModels() {
+    await this.deleteWhisperModel(NPU_MODEL_ID);
     const modelsDir = this.getModelsDir();
     let totalFreed = 0;
     let deletedCount = 0;
@@ -896,6 +1012,9 @@ class WhisperManager {
 
   // FFmpeg methods (still needed for audio format conversion)
   async getFFmpegPath() {
+    if (process.platform === "win32" && process.arch === "arm64") {
+      return require("./ffmpegUtils").getFFmpegPath();
+    }
     if (this.cachedFFmpegPath) {
       return this.cachedFFmpegPath;
     }

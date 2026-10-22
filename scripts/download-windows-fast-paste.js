@@ -49,6 +49,8 @@ function discardIncompatibleBinary(outputPath, reason) {
 }
 
 async function main() {
+  const arm64 = require("./lib/windows-arm64-helpers");
+  if (arm64.isArm64Target()) return arm64.ensureHelpers();
   if (process.platform !== "win32") {
     console.log("[windows-fast-paste] Skipping download (not Windows)");
     return;

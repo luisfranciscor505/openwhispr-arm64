@@ -3604,6 +3604,17 @@ class IPCHandlers {
       return this.whisperManager.checkModelStatus(modelName);
     });
 
+    ipcMain.handle("whisper-npu-status", async (event, probe) =>
+      probe === true
+        ? this.whisperManager.npuManager.probe()
+        : this.whisperManager.npuManager.status()
+    );
+    ipcMain.handle("whisper-npu-preference", async (event, preference) => {
+      this.whisperManager.npuManager.setPreference(preference);
+      await this.whisperManager.npuManager.stop();
+      return this.whisperManager.npuManager.status();
+    });
+
     ipcMain.handle("list-whisper-models", async (event) => {
       return this.whisperManager.listWhisperModels();
     });
@@ -12152,7 +12163,7 @@ class IPCHandlers {
         return await this.googleCalendarManager.startOAuth();
       } catch (error) {
         debugLogger.error("Google Calendar OAuth failed", { error: error.message }, "calendar");
-        return { success: false, error: error.message };
+        return { success: false, error: error.message, errorCode: error.code };
       }
     });
 

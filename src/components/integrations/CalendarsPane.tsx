@@ -162,6 +162,7 @@ export function CalendarsPane({ title }: CalendarsPaneProps): ReactElement {
   const [appleConnectError, setAppleConnectError] = useState<"denied" | "failed" | null>(null);
   // i18n prefix of the provider whose OAuth flow failed, e.g. "integrations.googleCalendar"
   const [oauthErrorKey, setOauthErrorKey] = useState<string | null>(null);
+  const [googleNotConfigured, setGoogleNotConfigured] = useState(false);
   const systemAudio = useSystemAudioPermission();
   const { request: requestSystemAudioAccess } = systemAudio;
   const needsSystemAudioGrant = !systemAudio.granted && canManageSystemAudioInApp(systemAudio);
@@ -169,6 +170,7 @@ export function CalendarsPane({ title }: CalendarsPaneProps): ReactElement {
 
   const startOAuth = useCallback(async () => {
     setIsConnecting(true);
+    setGoogleNotConfigured(false);
     try {
       const result = await window.electronAPI?.gcalStartOAuth?.();
       if (result?.success && result.email) {
@@ -179,6 +181,7 @@ export function CalendarsPane({ title }: CalendarsPaneProps): ReactElement {
         ]);
       } else if (!result?.error?.includes("access_denied")) {
         // access_denied means the user cancelled on the consent screen
+        setGoogleNotConfigured(result?.errorCode === "google_calendar_not_configured");
         setOauthErrorKey("integrations.googleCalendar");
       }
     } finally {
@@ -482,7 +485,13 @@ export function CalendarsPane({ title }: CalendarsPaneProps): ReactElement {
         open={!!oauthErrorKey}
         onOpenChange={(open) => !open && setOauthErrorKey(null)}
         title={oauthErrorKey ? t(`${oauthErrorKey}.connectFailed`) : ""}
-        description={oauthErrorKey ? t(`${oauthErrorKey}.connectFailedDescription`) : ""}
+        description={
+          oauthErrorKey
+            ? t(
+                `${oauthErrorKey}.${oauthErrorKey === "integrations.googleCalendar" && googleNotConfigured ? "notConfiguredDescription" : "connectFailedDescription"}`
+              )
+            : ""
+        }
         onOk={() => {}}
       />
     </IntegrationsPane>

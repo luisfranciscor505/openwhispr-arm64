@@ -49,6 +49,17 @@ const MACOS_ARM64_ONNXRUNTIME = {
 // them links espeak-ng (GPL-3.0), which the TTS builds compile into the C API
 // library. The ASR and diarization executables are the same in both builds.
 const BINARIES = {
+  "win32-arm64": {
+    archiveName: `sherpa-onnx-v${SHERPA_ONNX_VERSION}-win-arm64-shared-MD-Release-no-tts.tar.bz2`,
+    sha256: "39446be8a2a933308bb0b4b7a77fd21fdffaa68d3d73fc6f1e63634bb42d9cca",
+    binaryPath: "sherpa-onnx-offline-websocket-server.exe",
+    outputName: "sherpa-onnx-ws-win32-arm64.exe",
+    onlineBinaryPath: "sherpa-onnx-online-websocket-server.exe",
+    onlineOutputName: "sherpa-onnx-online-ws-win32-arm64.exe",
+    diarizeBinaryPath: "sherpa-onnx-offline-speaker-diarization.exe",
+    diarizeOutputName: "sherpa-onnx-diarize-win32-arm64.exe",
+    libPattern: "*.dll",
+  },
   "darwin-arm64": {
     archiveName: `sherpa-onnx-v${SHERPA_ONNX_VERSION}-osx-universal2-shared-no-tts.tar.bz2`,
     binaryPath: "sherpa-onnx-offline-websocket-server",
@@ -362,6 +373,12 @@ async function downloadBinary(platformArch, config, isForce = false) {
 
   try {
     await downloadFile(url, archivePath);
+    if (
+      config.sha256 &&
+      crypto.createHash("sha256").update(fs.readFileSync(archivePath)).digest("hex") !==
+        config.sha256
+    )
+      throw new Error("sherpa-onnx archive checksum mismatch");
 
     fs.mkdirSync(extractDir, { recursive: true });
     await extractTarBz2(archivePath, extractDir);

@@ -47,7 +47,11 @@ export default function CalendarConnectionsStep() {
               { email: result.email },
             ]);
           } else if (!result?.error?.includes("access_denied")) {
-            setError(t("integrations.googleCalendar.connectFailedDescription"));
+            setError(
+              t(
+                `integrations.googleCalendar.${result?.errorCode === "google_calendar_not_configured" ? "notConfiguredDescription" : "connectFailedDescription"}`
+              )
+            );
           }
         } else if (provider === "microsoft") {
           const result = await window.electronAPI?.mcalStartOAuth?.();

@@ -296,9 +296,13 @@ for root_label in ROOT_LABELS:
 print(json.dumps({"regular": sorted(collected), "avx2": sorted(avx2)}))
 `;
 
-  const output = execFileSync("python3", ["-c", pythonScript], {
-    encoding: "utf8",
-  });
+  const output = execFileSync(
+    process.env.PYTHON || (process.platform === "win32" ? "python" : "python3"),
+    ["-c", pythonScript],
+    {
+      encoding: "utf8",
+    }
+  );
   return JSON.parse(output);
 }
 
@@ -400,7 +404,7 @@ function buildManifest({ helperRoot, webrtcApmRoot, abslRoot, targetPlatform, ta
       ...EXTRA_WEBRTC_SOURCES.map((source) => path.join(webrtcApmRoot, source)),
     ]),
   ];
-  const avx2Sources = [...avx2];
+  const avx2Sources = normalizeArch(targetArch) === "arm64" ? [] : [...avx2];
   const abslSources = ABSL_SOURCES.map((source) => path.join(abslRoot, source));
   const defines = getPlatformDefines(targetPlatform, targetArch);
   const baseCompileOptions = targetPlatform === "win32" ? [] : ["-O2"];

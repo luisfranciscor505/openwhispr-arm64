@@ -331,6 +331,7 @@ class ClipboardManager {
   }
 
   getNircmdPath() {
+    if (process.platform === "win32" && process.arch === "arm64") return null;
     if (this.nircmdChecked) {
       return this.nircmdPath;
     }
