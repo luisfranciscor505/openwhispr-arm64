@@ -13,6 +13,21 @@ function selectRelease(releases, currentTag) {
       .find((r) => semver.gt(r.tag_name.slice(1), currentTag.slice(1))) || null
   );
 }
+function shouldRetryOffline(run, jobs) {
+  const hardware = jobs.find((job) => job.name === "hardware");
+  return (
+    run.status === "completed" &&
+    ["failure", "cancelled", "timed_out"].includes(run.conclusion) &&
+    jobs.some((job) => job.name === "build" && job.conclusion === "success") &&
+    jobs.some((job) => job.name === "sign" && job.conclusion === "success") &&
+    Boolean(
+      hardware &&
+      !hardware.runner_id &&
+      ["failure", "cancelled", "timed_out"].includes(hardware.conclusion)
+    )
+  );
+}
+
 function archiveUpstreamWorkflows() {
   const dir = ".github/workflows";
   const archive = ".github/upstream-workflows";
@@ -67,10 +82,47 @@ async function sync() {
       "--state",
       "all",
       "--json",
-      "number,state"
+      "number,state,isDraft"
     )
   );
   if (prs.some((p) => p.state !== "CLOSED")) {
+    const open = prs.find((p) => p.state === "OPEN" && !p.isDraft);
+    if (open) {
+      const runs = JSON.parse(
+        gh(
+          "api",
+          `repos/${REPOSITORY}/actions/workflows/arm64-release.yml/runs?per_page=100`,
+          "--jq",
+          ".workflow_runs | map({id,display_title,status,conclusion})"
+        )
+      );
+      const last = runs.find((run) => run.display_title === `ARM64 release — ${branch}`);
+      if (last) {
+        const jobs = JSON.parse(
+          gh(
+            "api",
+            `repos/${REPOSITORY}/actions/runs/${last.id}/jobs`,
+            "--jq",
+            ".jobs | map({name,conclusion,runner_id})"
+          )
+        );
+        if (shouldRetryOffline(last, jobs)) {
+          gh(
+            "workflow",
+            "run",
+            "arm64-release.yml",
+            "--repo",
+            REPOSITORY,
+            "--ref",
+            "arm64",
+            "-f",
+            `candidate=${branch}`
+          );
+          console.log(`Retried ${branch}: its NPU job expired before reaching a runner.`);
+          return;
+        }
+      }
+    }
     console.log(`Candidate ${branch} already exists.`);
     return;
   }
@@ -152,4 +204,4 @@ if (require.main === module)
     console.error(error.message);
     process.exitCode = 1;
   });
-module.exports = { selectRelease, archiveUpstreamWorkflows, mergeCandidate };
+module.exports = { selectRelease, archiveUpstreamWorkflows, mergeCandidate, shouldRetryOffline };

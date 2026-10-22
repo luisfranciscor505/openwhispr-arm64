@@ -1,4 +1,5 @@
 name: Verified Windows ARM64 release
+run-name: ARM64 release — ${{ inputs.candidate }}
 on:
   workflow_dispatch:
     inputs:

@@ -4,6 +4,25 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const { selectRelease } = require("../../scripts/sync-arm64-upstream");
+test("retries an expired offline runner queue, but never hides failed NPU tests", () => {
+  const { shouldRetryOffline } = require("../../scripts/sync-arm64-upstream");
+  const run = { status: "completed", conclusion: "failure" };
+  const jobs = [
+    { name: "build", conclusion: "success" },
+    { name: "sign", conclusion: "success" },
+    { name: "hardware", conclusion: "failure", runner_id: 0 },
+  ];
+  assert.equal(shouldRetryOffline(run, jobs), true);
+  assert.equal(shouldRetryOffline({ ...run, status: "in_progress" }, jobs), false);
+  assert.equal(
+    shouldRetryOffline(run, [...jobs.slice(0, 2), { ...jobs[2], runner_id: 123 }]),
+    false
+  );
+  assert.equal(
+    shouldRetryOffline(run, [{ ...jobs[0], conclusion: "failure" }, ...jobs.slice(1)]),
+    false
+  );
+});
 const { hash, assertEvidence } = require("../../scripts/lib/arm64-release");
 test("conflicted upstream merges abort cleanly and preserve the port", () => {
   const { execFileSync } = require("node:child_process");
