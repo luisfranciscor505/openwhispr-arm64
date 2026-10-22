@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert/strict");
 const [installed, candidate, profile, status] = process.argv.slice(2);
+const downloadOnly = process.argv.includes("--download-only");
 const appRoot = path.join(installed, "resources", "app.asar");
 const packageInfo = require(path.join(appRoot, "package.json"));
 const envelope = JSON.parse(fs.readFileSync(path.join(candidate, "arm64-update.json")));
@@ -13,7 +14,9 @@ fs.mkdirSync(profile, { recursive: true });
 app.setPath("userData", profile);
 app.setPath("appData", path.dirname(profile));
 app.setAppPath(appRoot);
-app.getVersion = () => packageInfo.version;
+app.getVersion = () => (downloadOnly ? "0.0.0" : packageInfo.version);
+process.env.LOCALAPPDATA = path.join(profile, "updater-cache");
+fs.mkdirSync(process.env.LOCALAPPDATA, { recursive: true });
 Object.defineProperty(process, "resourcesPath", { value: path.dirname(appRoot) });
 app
   .whenReady()
@@ -53,6 +56,10 @@ app
     await manager.downloadUpdate();
     assert.equal(manager.updateDownloaded, true);
     assert.equal(autoUpdater.autoInstallOnAppQuit, false);
+    await require(path.join(appRoot, "src", "helpers", "arm64UpdateManifest")).verifyInstaller(
+      manager.downloadedFile,
+      manager.verifiedManifests.get(provenance.version)
+    );
     fs.writeFileSync(
       status,
       JSON.stringify({
@@ -61,6 +68,11 @@ app
         previousVersion: packageInfo.version,
       })
     );
+    if (downloadOnly) {
+      manager.cleanup();
+      app.exit(0);
+      return;
+    }
     const result = await manager.installUpdate();
     assert.equal(result.success, true);
   })
