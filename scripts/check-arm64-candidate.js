@@ -29,7 +29,9 @@ if (changedPins)
   );
 if (!release.publicKey.startsWith("-----BEGIN PUBLIC KEY-----"))
   throw new Error("Missing update trust key");
-const unexpected = fs.readdirSync(".github/workflows").filter((name) => !name.startsWith("arm64-"));
+const unexpected = fs
+  .readdirSync(".github/workflows")
+  .filter((name) => !["arm64-release.yml", "arm64-sync.yml"].includes(name));
 if (unexpected.length)
   throw new Error(`Upstream workflows must stay archived: ${unexpected.join(", ")}`);
 console.log("Candidate provenance and pinned native dependencies verified.");

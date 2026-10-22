@@ -657,6 +657,7 @@ class IPCHandlers {
     this.diarizationManager = managers.diarizationManager;
     this.windowManager = managers.windowManager;
     this.updateManager = managers.updateManager;
+    this.updateActivity = require("./updateActivity").createUpdateActivity(() => this.updateManager?.isInstalling);
     this.windowsKeyManager = managers.windowsKeyManager;
     this.linuxKeyManager = managers.linuxKeyManager;
     this.textEditMonitor = managers.textEditMonitor;
@@ -3210,7 +3211,7 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("transcribe-audio-file", async (event, filePath, options = {}) => {
+    this.handleTranscription("transcribe-audio-file", async (event, filePath, options = {}) => {
       if (this.updateManager.isInstalling) return { success: false, error: "Update installation in progress" };
       // Uploads pass a requestId so cancel-upload-transcription can abort the
       // local decode; flows without one (voice drafts) register nothing.
@@ -3468,7 +3469,7 @@ class IPCHandlers {
       return { success: true };
     });
 
-    ipcMain.handle("transcribe-local-whisper", async (_event, audioBlob, options = {}) => {
+    this.handleTranscription("transcribe-local-whisper", async (_event, audioBlob, options = {}) => {
       if (this.updateManager.isInstalling) return { success: false, error: "Update installation in progress" };
       debugLogger.log("transcribe-local-whisper called", {
         audioBlobType: typeof audioBlob,
@@ -3869,7 +3870,7 @@ class IPCHandlers {
       return this.whisperManager.checkFFmpegAvailability();
     });
 
-    ipcMain.handle("transcribe-local-parakeet", async (_event, audioBlob, options = {}) => {
+    this.handleTranscription("transcribe-local-parakeet", async (_event, audioBlob, options = {}) => {
       debugLogger.log("transcribe-local-parakeet called", {
         audioBlobType: typeof audioBlob,
         audioBlobSize: audioBlob?.byteLength || audioBlob?.length || 0,
@@ -4065,7 +4066,7 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("diarize-audio-file", async (event, filePath, options = {}) => {
+    this.handleTranscription("diarize-audio-file", async (event, filePath, options = {}) => {
       // Registered under the same requestId as the upload's transcription, so
       // one cancel kills both the decode and the diarization child process.
       const { signal, release } = this._uploadCancelRegistry.register(options.requestId);
@@ -6733,7 +6734,7 @@ class IPCHandlers {
       configPath: "note-recording-config",
     });
 
-    ipcMain.handle("cloud-transcribe", async (event, audioBuffer, opts = {}) => {
+    this.handleTranscription("cloud-transcribe", async (event, audioBuffer, opts = {}) => {
       const sender = event.sender;
       const senderId = sender.id;
       const requestId = crypto.randomUUID();
@@ -10612,7 +10613,7 @@ class IPCHandlers {
 
     ipcMain.handle("get-note-recording-config", handleNoteRecordingConfigRequest);
 
-    ipcMain.handle("transcribe-audio-file-cloud", async (event, filePath, opts = {}) => {
+    this.handleTranscription("transcribe-audio-file-cloud", async (event, filePath, opts = {}) => {
       const requestId = typeof opts?.requestId === "string" ? opts.requestId : null;
       const { signal, release } = this._uploadCancelRegistry.register(requestId);
       let cleanupUpload = null;
@@ -11215,6 +11216,7 @@ class IPCHandlers {
     ipcMain.handle("install-update", async () => {
       this.updateManager.canInstall = () =>
         !meetingTranscriptionLifecycle.hasActiveSessions() &&
+        !this.updateActivity.isBusy() &&
         !this._uploadCancelRegistry.hasActive() &&
         !this.whisperManager?._transcribing &&
         !this.whisperManager?.npuManager?.pending?.size &&
@@ -13371,6 +13373,11 @@ class IPCHandlers {
         }
       }
     })();
+  }
+
+  handleTranscription(channel, handler) {
+    this.updateActivity ||= require("./updateActivity").createUpdateActivity(() => this.updateManager?.isInstalling);
+    ipcMain.handle(channel, this.updateActivity.wrap(handler));
   }
 
   deleteTranscriptionInternal(id) {

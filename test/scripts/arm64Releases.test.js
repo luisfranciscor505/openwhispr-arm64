@@ -61,7 +61,12 @@ test("publication requires complete hardware evidence for the exact run, source 
   const file = path.join(dir, "installer.exe");
   fs.writeFileSync(file, "candidate");
   try {
-    const provenance = { sourceCommit: "a".repeat(40), installerSha256: hash(file), runId: "123" };
+    const provenance = {
+      sourceCommit: "a".repeat(40),
+      installerSha256: hash(file),
+      runId: "123",
+      runAttempt: "1",
+    };
     const good = {
       ...provenance,
       success: true,

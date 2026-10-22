@@ -21,7 +21,8 @@ function assertEvidence(provenance, report, installer) {
     !report.explicitNpuFailure ||
     !report.cancellation ||
     !report.rendererIpc ||
-    report.runId !== provenance.runId
+    report.runId !== provenance.runId ||
+    report.runAttempt !== provenance.runAttempt
   )
     throw new Error("Candidate hardware evidence does not match this build");
 }

@@ -69,7 +69,15 @@ function copyArm64Crt(destination, env) {
     .filter((name) => /^\d+\./.test(name))
     .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
   const source = versions
-    .map((version) => path.join(redist, version, "arm64", "Microsoft.VC143.CRT"))
+    .flatMap((version) => {
+      const arm64 = path.join(redist, version, "arm64");
+      return fs.existsSync(arm64)
+        ? fs
+            .readdirSync(arm64)
+            .filter((name) => /^Microsoft\.VC\d+\.CRT$/.test(name))
+            .map((name) => path.join(arm64, name))
+        : [];
+    })
     .find((dir) => fs.existsSync(dir));
   if (!source) throw new Error("Visual Studio ARM64 redistributable DLLs are missing");
   fs.mkdirSync(destination, { recursive: true });

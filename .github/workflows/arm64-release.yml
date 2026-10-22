@@ -51,7 +51,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: node node_modules/electron/install.js
       - name: ARM64 regression tests
-        run: node --test test/helpers/arm64Updates.test.js test/helpers/whisperNpu.test.js test/helpers/whisperNpuFallback.test.js test/helpers/peArchitecture.test.js test/helpers/updater.test.js test/helpers/meetingTranscriptionLifecycle.test.js test/helpers/uploadCancelRegistry.test.js test/scripts/windowsArm64Config.test.js test/scripts/arm64Releases.test.js
+        run: node --test test/helpers/arm64Updates.test.js test/helpers/updateActivity.test.js test/helpers/whisperNpu.test.js test/helpers/whisperNpuFallback.test.js test/helpers/peArchitecture.test.js test/helpers/updater.test.js test/helpers/meetingTranscriptionLifecycle.test.js test/helpers/uploadCancelRegistry.test.js test/scripts/windowsArm64Config.test.js test/scripts/arm64Releases.test.js
       - run: npm run lint
       - run: npx tsc --noEmit -p src/tsconfig.json
       - name: Native toolchain

@@ -17,6 +17,7 @@ const report = {
   sourceCommit: provenance.sourceCommit,
   installerSha256: provenance.installerSha256,
   runId: provenance.runId,
+  runAttempt: provenance.runAttempt,
 };
 const run = (exe, args, env = {}) =>
   execFileSync(exe, args, {

@@ -38,7 +38,10 @@ test("ARM64 NSIS uses a decodable archive filter and one resource copy per desti
   assert.equal(config.extraMetadata.localArm64Build, true);
   assert.equal(config.win.forceCodeSigning, false);
   assert.equal(config.nsis.packElevateHelper, false);
-  assert.equal(config.publish, null);
+  if (process.env.OPENWHISPR_MANAGED_RELEASE === "1") {
+    assert.equal(config.publish.repo, "openwhispr-arm64");
+    assert.equal(config.publish.owner, "luisfranciscor505");
+  } else assert.equal(config.publish, null);
   const destinations = config.extraResources.map((item) =>
     typeof item === "string" ? item : item.to
   );

@@ -16,8 +16,15 @@ process.env.ELECTRON_BUILDER_7Z_FILTER = "BCJ";
 module.exports = {
   ...shared,
   extraMetadata: {
-    ...shared.extraMetadata, windowsTrayIdentity: false, localArm64Build: true,
-    ...(managed ? { arm64Release: release, version: `${release.upstreamTag.slice(1)}-arm64.${release.portRevision}` } : {}),
+    ...shared.extraMetadata,
+    windowsTrayIdentity: false,
+    localArm64Build: true,
+    ...(managed
+      ? {
+          arm64Release: release,
+          version: `${release.upstreamTag.slice(1)}-arm64.${release.portRevision}`,
+        }
+      : {}),
   },
   win: {
     ...shared.win,
@@ -46,7 +53,15 @@ module.exports = {
       ],
     },
   ],
-  publish: null,
+  publish: managed
+    ? {
+        provider: "github",
+        owner: "luisfranciscor505",
+        repo: "openwhispr-arm64",
+        private: false,
+        releaseType: "draft",
+      }
+    : null,
   afterAllArtifactBuild: async (context) => {
     const appDir = path.join(context.outDir, "win-arm64-unpacked");
     const { validateArm64Package } = require("./scripts/lib/validate-arm64-package");

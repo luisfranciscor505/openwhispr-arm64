@@ -30,6 +30,7 @@ app
     };
     const { autoUpdater } = require(path.join(appRoot, "node_modules", "electron-updater"));
     autoUpdater.forceDevUpdateConfig = true;
+    autoUpdater.updateConfigPath = path.join(installed, "resources", "app-update.yml");
     autoUpdater.installDirectory = installed;
     autoUpdater.httpExecutor.download = async (url, target) => {
       assert.equal(url.href, JSON.parse(Buffer.from(envelope.payload, "base64")).installer.url);

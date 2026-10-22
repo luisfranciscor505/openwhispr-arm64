@@ -18,7 +18,7 @@ function archiveUpstreamWorkflows() {
   const archive = ".github/upstream-workflows";
   fs.mkdirSync(archive, { recursive: true });
   for (const name of fs.readdirSync(dir)) {
-    if (!name.startsWith("arm64-") && /\.ya?ml$/.test(name))
+    if (!["arm64-release.yml", "arm64-sync.yml"].includes(name) && /\.ya?ml$/.test(name))
       fs.renameSync(path.join(dir, name), path.join(archive, name));
   }
 }
