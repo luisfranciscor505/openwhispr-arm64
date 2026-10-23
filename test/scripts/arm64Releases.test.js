@@ -73,6 +73,31 @@ test("retries an expired offline runner queue, but never hides failed NPU tests"
   );
 });
 const { hash, assertEvidence } = require("../../scripts/lib/arm64-release");
+test("upgrade publication requires retained data and actual NPU execution after the exact previous version", () => {
+  const { assertUpgradeEvidence } = require("../../scripts/lib/arm64-release");
+  const report = {
+    updateCycle: true,
+    previousVersion: "1.10.4-arm64.2",
+    settingsAndModelsPreserved: true,
+    npuAfterUpdate: true,
+  };
+  assert.doesNotThrow(() => assertUpgradeEvidence(report, report.previousVersion));
+  for (const change of [
+    { updateCycle: "bootstrap" },
+    { previousVersion: "1.10.4-arm64.1" },
+    { settingsAndModelsPreserved: false },
+    { npuAfterUpdate: undefined },
+    { npuAfterUpdate: "true" },
+  ])
+    assert.throws(
+      () => assertUpgradeEvidence({ ...report, ...change }, report.previousVersion),
+      /missing or stale/
+    );
+  assert.doesNotThrow(() =>
+    assertUpgradeEvidence({ updateCycle: "bootstrap", previousVersion: null }, null)
+  );
+  assert.throws(() => assertUpgradeEvidence(report, null), /Bootstrap/);
+});
 test("conflicted upstream merges abort cleanly and preserve the port", () => {
   const { execFileSync } = require("node:child_process");
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "arm64-merge-"));

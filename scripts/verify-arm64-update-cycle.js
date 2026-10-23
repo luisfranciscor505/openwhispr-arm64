@@ -48,6 +48,14 @@ async function verifyCycle(candidate, work) {
   const modelPath = path.join(realModels, "ggml-base.bin");
   fs.copyFileSync(path.join(process.env.OPENWHISPR_VERIFY_MODELS, "ggml-base.bin"), modelPath);
   const modelBefore = hash(modelPath);
+  const npuModels = path.join(realModels, "base-snapdragon-npu");
+  fs.cpSync(path.join(process.env.OPENWHISPR_VERIFY_MODELS, "base-snapdragon-npu"), npuModels, {
+    recursive: true,
+  });
+  const npuBefore = fs
+    .readdirSync(npuModels)
+    .filter((name) => fs.statSync(path.join(npuModels, name)).isFile())
+    .map((name) => ({ name, sha256: hash(path.join(npuModels, name)) }));
   const status = path.join(work, "update-cycle.json");
   run(path.join(__dirname, "..", "node_modules", "electron", "dist", "electron.exe"), [
     path.join(__dirname, "verify-arm64-update-driver.js"),
@@ -75,6 +83,12 @@ async function verifyCycle(candidate, work) {
   );
   assert.equal(hash(sentinel), before);
   assert.equal(hash(modelPath), modelBefore);
+  for (const item of npuBefore)
+    assert.equal(
+      hash(path.join(npuModels, item.name)),
+      item.sha256,
+      `NPU asset changed: ${item.name}`
+    );
   assert.equal(JSON.parse(fs.readFileSync(status)).authenticated, true);
   // Stop only this isolated restarted instance, never another user's app.
   const powershell = path.join(
@@ -107,7 +121,25 @@ async function verifyCycle(candidate, work) {
     "--report-dir",
     path.join(work, "upgrade-ui"),
   ]);
-  return { updateCycle: true, previousVersion: manifest.version, settingsAndModelsPreserved: true };
+  // Execute both graphs from the updated installation with the retained model
+  // cache, rather than inferring post-upgrade health from the version string.
+  const afterUpdate = path.join(work, "after-update", "engines.json");
+  run(path.join(__dirname, "..", "node_modules", "electron", "dist", "electron.exe"), [
+    path.join(__dirname, "verify-arm64-release-engines.js"),
+    target,
+    realModels,
+    afterUpdate,
+  ]);
+  const engines = JSON.parse(fs.readFileSync(afterUpdate));
+  assert.equal(engines.npu, true);
+  assert.equal(engines.multilingual, true);
+  return {
+    updateCycle: true,
+    previousVersion: manifest.version,
+    settingsAndModelsPreserved: true,
+    npuAfterUpdate: true,
+    afterUpdateProfiles: engines.npuProfiles,
+  };
 }
 
 module.exports = { verifyCycle };

@@ -35,6 +35,21 @@ function signedEnvelope(manifest, privateKey) {
   };
 }
 
+function assertUpgradeEvidence(report, previousVersion) {
+  if (previousVersion === null) {
+    if (report.updateCycle !== "bootstrap" || report.previousVersion !== null)
+      throw new Error("Bootstrap verification is missing");
+    return;
+  }
+  if (
+    report.updateCycle !== true ||
+    report.previousVersion !== previousVersion ||
+    report.settingsAndModelsPreserved !== true ||
+    report.npuAfterUpdate !== true
+  )
+    throw new Error("Installed A to B update verification is missing or stale");
+}
+
 function manifestFor(release, provenance, installer) {
   const version = versionOf(release);
   return {
@@ -56,4 +71,12 @@ function manifestFor(release, provenance, installer) {
   };
 }
 
-module.exports = { hash, git, versionOf, assertEvidence, signedEnvelope, manifestFor };
+module.exports = {
+  hash,
+  git,
+  versionOf,
+  assertEvidence,
+  assertUpgradeEvidence,
+  signedEnvelope,
+  manifestFor,
+};

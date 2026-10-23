@@ -85,7 +85,8 @@ The first bootstrap release has no previous managed version to upgrade from.
 Every later release must additionally prove an installed A-to-B update using
 the packaged updater, authenticated candidate metadata and the real NSIS
 installer. The test substitutes transport with the already downloaded candidate;
-it checks renderer preferences and model bytes after installation and restart.
+it checks renderer preferences and CPU/NPU model bytes after installation and
+restart, then transcribes both fixed languages again using the updated NPU graphs.
 Native/model pin changes are blocked in automatically imported candidates; make
 and validate those changes separately on the maintained branch.
 

@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
-const { hash, versionOf, assertEvidence } = require("./lib/arm64-release");
+const { hash, versionOf, assertEvidence, assertUpgradeEvidence } = require("./lib/arm64-release");
 const release = require("../arm64-release.json");
 const { REPOSITORY, verifyManifest } = require("../src/helpers/arm64UpdateManifest");
 const output = path.resolve(process.argv[2] || "dist-arm64");
@@ -34,15 +34,10 @@ const previous = require("node:child_process").spawnSync(
 );
 if (previous.status === 0) {
   const previousVersion = JSON.parse(previous.stdout).tag_name.replace(/^v/, "");
-  if (
-    report.updateCycle !== true ||
-    report.previousVersion !== previousVersion ||
-    !report.settingsAndModelsPreserved
-  )
-    throw new Error("Installed A to B update verification is missing or stale");
-} else if (!previous.stderr.includes("404") || report.updateCycle !== "bootstrap") {
+  assertUpgradeEvidence(report, previousVersion);
+} else if (!previous.stderr.includes("404")) {
   throw new Error("Cannot establish previous release for upgrade verification");
-}
+} else assertUpgradeEvidence(report, null);
 fs.writeFileSync(
   path.join(output, "SHA256SUMS.txt"),
   `${hash(installer)}  ${path.basename(installer)}\n`
