@@ -9,8 +9,11 @@ $policy = Join-Path $policyDirectory 'job-policy.js'
 # avoids depending on the service account's PowerShell execution policy.
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'arm64-runner-job-policy.js') -Destination $policy -Force
 $environmentFile = Join-Path $root 'runner\.env'
-$lines = @(Get-Content -LiteralPath $environmentFile | Where-Object { $_ -notmatch '^ACTIONS_RUNNER_HOOK_JOB_STARTED=' })
+$lines = @(Get-Content -LiteralPath $environmentFile | Where-Object { $_ -notmatch '^(ACTIONS_RUNNER_HOOK_JOB_STARTED|PSExecutionPolicyPreference)=' })
 $lines += "ACTIONS_RUNNER_HOOK_JOB_STARTED=$policy"
+# Local generated workflow scripts must also run under the service account.
+# This applies only to runner child processes, not machine/account policy.
+$lines += 'PSExecutionPolicyPreference=RemoteSigned'
 Set-Content -LiteralPath $environmentFile -Value $lines
 Get-Service -Name 'actions.runner.luisfranciscor505-openwhispr-arm64.*' | Restart-Service
 @{ success = $true; jobPolicy = 'trusted release workflow only' } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'policy-result.json')
