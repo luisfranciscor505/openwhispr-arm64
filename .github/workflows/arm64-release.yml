@@ -1,5 +1,5 @@
 name: Verified Windows ARM64 release
-run-name: ARM64 release — ${{ inputs.candidate }}
+run-name: ${{ inputs.runner_preflight && 'ARM64 runner preflight' || format('ARM64 release — {0}', inputs.candidate) }}
 on:
   workflow_dispatch:
     inputs:
@@ -8,14 +8,35 @@ on:
         default: arm64
         required: true
         type: string
+      runner_preflight:
+        description: 'Check the isolated runner setup without building or publishing'
+        default: false
+        type: boolean
 permissions:
   contents: read
 concurrency:
-  group: arm64-publication
+  group: ${{ inputs.runner_preflight && 'arm64-runner-preflight' || 'arm64-publication' }}
   cancel-in-progress: false
 jobs:
+  runner-preflight:
+    if: github.repository == 'luisfranciscor505/openwhispr-arm64' && github.ref == 'refs/heads/arm64' && inputs.runner_preflight
+    runs-on: [self-hosted, Windows, ARM64, snapdragon-npu]
+    timeout-minutes: 10
+    steps:
+      - name: Verify generated PowerShell scripts can run under the service account
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Output "Runner process execution policy: $(Get-ExecutionPolicy)"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          architecture: arm64
+      - name: Verify native Node and isolated account
+        shell: cmd
+        run: node -e "const a=require('node:assert/strict'); a.equal(process.arch,'arm64'); a.equal(require('node:os').userInfo().username.toLowerCase(),'openwhisprverify'); console.log('Native ARM64 runner account verified');"
   resolve:
-    if: github.repository == 'luisfranciscor505/openwhispr-arm64' && github.ref == 'refs/heads/arm64'
+    if: github.repository == 'luisfranciscor505/openwhispr-arm64' && github.ref == 'refs/heads/arm64' && !inputs.runner_preflight
     runs-on: ubuntu-latest
     permissions:
       contents: read
