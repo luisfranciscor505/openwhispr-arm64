@@ -1,3 +1,10 @@
+> **Windows ARM64 / Snapdragon fork:** use this fork's
+> [ARM64 releases](https://github.com/luisfranciscor505/openwhispr-arm64/releases).
+> The first managed installer requires a manual installation; subsequent verified
+> updates use this fork's signed feed. See [build and NPU setup](docs/windows-arm64.md)
+> and [release maintenance](docs/arm64-continuous-releases.md). The upstream links
+> below describe the original project and its other platform builds.
+
 <p align="center">
   <img src="src/assets/logo.svg" alt="OpenWhispr" width="120" />
 </p>
