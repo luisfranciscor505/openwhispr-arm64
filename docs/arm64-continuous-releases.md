@@ -16,7 +16,7 @@ GitHub Actions' executable workflow directory.
 `Verified Windows ARM64 release` builds the candidate on `windows-11-arm`, runs
 quality checks, then waits for the `snapdragon-npu` runner. It tests the exact
 installer in a dedicated account. The publication job checks source, run/attempt,
-installer bytes and required NPU/CPU/UI results before signing and publishing.
+installer bytes and required NPU/CPU/UI results before publishing the signed assets.
 Only a verified candidate PR is merged. The runner's administrator-owned job hook
 refuses all jobs except this repository's release workflow dispatched from
 `arm64`, before checkout. External contributors also require workflow approval;
@@ -69,6 +69,31 @@ per-user registration entries. They never capture microphone audio.
 The workflow uses the same pinned build scripts as local builds. Public releases
 never bundle `.env`; configure OAuth/API credentials locally. Local Calendar
 settings remain in the existing user data directory.
+
+### Personal Google Calendar setup
+
+Create a Desktop OAuth client in a Google Cloud project and enable the Google
+Calendar API. Configure the consent screen with `openid`,
+`https://www.googleapis.com/auth/userinfo.email`,
+`https://www.googleapis.com/auth/calendar.calendarlist.readonly`, and
+`https://www.googleapis.com/auth/calendar.events.readonly`. For a testing app,
+add your own account as a test user. Download its client JSON to a private folder
+outside this checkout, then run:
+
+```powershell
+node scripts/configure-google-calendar.js "C:\private\desktop-client.json"
+```
+
+Restart OpenWhispr and connect Google Calendar in settings. The helper preserves
+other local environment settings and stores the client configuration in
+`%APPDATA%\open-whispr\.env`; installers and public source exclude this file.
+Calendar access still requires the account owner's Google consent. Keep the
+client JSON and the app profile private; the existing app stores OAuth tokens
+in its local database. No Calendar credentials are supplied by public releases.
+
+Google's external **Testing** mode expires Calendar refresh tokens after seven
+days, so reconnect when requested. This is a Google project setting, independent
+of the ARM64 updater. See [Google's refresh-token documentation](https://developers.google.com/identity/protocols/oauth2/#expiration).
 
 ## Signing keys and recovery
 
