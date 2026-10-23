@@ -3,15 +3,18 @@ const fs = require("node:fs");
 const path = require("node:path");
 const assert = require("node:assert/strict");
 const { hash } = require("./lib/arm64-release");
-const [installed, models, output] = process.argv.slice(2);
+const [installed, models, output, fixtureDirectory, profileDirectory] = process.argv.slice(2);
 const appRoot = path.join(installed, "resources", "app.asar");
-fs.mkdirSync(path.join(path.dirname(output), "profile"), { recursive: true });
+const profile = path.resolve(profileDirectory || path.join(path.dirname(output), "profile"));
+fs.mkdirSync(profile, { recursive: true });
 fs.mkdirSync(path.join(path.dirname(output), "appdata"), { recursive: true });
-app.setPath("userData", path.join(path.dirname(output), "profile"));
+app.setPath("userData", profile);
 app.setPath("appData", path.join(path.dirname(output), "appdata"));
 Object.defineProperty(process, "resourcesPath", { value: path.join(installed, "resources") });
 app.setAppPath(appRoot);
-const fixtures = path.join(__dirname, "..", "test", "fixtures", "arm64-release");
+const fixtures = path.resolve(
+  fixtureDirectory || path.join(__dirname, "..", "test", "fixtures", "arm64-release")
+);
 const fixtureHashes = require("../test/fixtures/arm64-release/manifest.json");
 app
   .whenReady()

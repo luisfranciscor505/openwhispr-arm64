@@ -66,6 +66,14 @@ storage, where preferences and profiles can change without touching user models.
 Installer tests run only under the dedicated account, because NSIS also writes
 per-user registration entries. They never capture microphone audio.
 
+For manual engine diagnosis, run `scripts/verify-arm64-release-engines.js` with
+Electron and positional installation, model-cache, report-file, optional fixture
+directory, and optional profile-directory paths. Defaults keep the profile next
+to the report and use `test/fixtures/arm64-release`. A substituted fixture directory
+must still contain the pinned corpus bytes: the source-controlled hashes and
+expected English/Spanish transcripts remain mandatory. The renderer verifier
+accepts `--install-dir`, `--profile-dir`, and `--report-dir` separately.
+
 The workflow uses the same pinned build scripts as local builds. Public releases
 never bundle `.env`; configure OAuth/API credentials locally. Local Calendar
 settings remain in the existing user data directory.
