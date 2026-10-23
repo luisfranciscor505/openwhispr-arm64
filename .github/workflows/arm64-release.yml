@@ -25,7 +25,7 @@ jobs:
   runner-preflight:
     if: github.repository == 'luisfranciscor505/openwhispr-arm64' && github.ref == 'refs/heads/arm64' && inputs.runner_preflight
     runs-on: [self-hosted, Windows, ARM64, snapdragon-npu]
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
       actions: read
@@ -56,7 +56,7 @@ jobs:
         run: node -e "require('node:assert/strict').match(process.env.DIAGNOSTIC_RUN_ID,/^[1-9][0-9]*$/)"
       - run: npm ci --ignore-scripts
         if: inputs.diagnostic_run_id != ''
-      - run: node node_modules/electron/install.js
+      - run: node scripts/install-release-electron.js
         if: inputs.diagnostic_run_id != ''
       - uses: actions/download-artifact@v4
         if: inputs.diagnostic_run_id != ''
@@ -134,7 +134,7 @@ jobs:
       - name: Validate candidate and pins
         run: node scripts/check-arm64-candidate.js
       - run: npm ci --ignore-scripts
-      - run: node node_modules/electron/install.js
+      - run: node scripts/install-release-electron.js
       - name: ARM64 regression tests
         run: node --test test/helpers/arm64Updates.test.js test/helpers/updateActivity.test.js test/helpers/whisperNpu.test.js test/helpers/whisperNpuFallback.test.js test/helpers/peArchitecture.test.js test/helpers/updater.test.js test/helpers/meetingTranscriptionLifecycle.test.js test/helpers/uploadCancelRegistry.test.js test/scripts/windowsArm64Config.test.js test/scripts/arm64Releases.test.js
       - run: npm run lint
@@ -207,7 +207,7 @@ jobs:
           node-version: '24'
           architecture: arm64
       - run: npm ci --ignore-scripts
-      - run: node node_modules/electron/install.js
+      - run: node scripts/install-release-electron.js
       - uses: actions/download-artifact@v4
         with:
           name: arm64-candidate
