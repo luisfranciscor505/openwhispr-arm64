@@ -79,7 +79,9 @@ jobs:
           path: |
             .cache/arm64
             resources/bin
-          key: arm64-native-${{ hashFiles('scripts/prepare-windows-arm64.js', 'scripts/build-whisper-npu.js', 'scripts/download-*.js', 'native/**', 'resources/*.c', 'resources/*.cpp', 'package-lock.json') }}
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: arm64-native-v2-${{ hashFiles('scripts/prepare-windows-arm64.js', 'scripts/build-whisper-npu.js', 'scripts/download-*.js', 'native/**', 'resources/*.c', 'resources/*.cpp', 'package-lock.json') }}
       - run: npm run prepare:win:arm64
       - run: npx electron-builder install-app-deps --arch arm64
       - run: npm run build:renderer:win:arm64
