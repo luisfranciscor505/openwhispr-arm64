@@ -95,6 +95,28 @@ test("upstream sync cannot silently upgrade pinned native runtimes or ARM64 bina
     "node_modules/native-addon",
   ]);
 });
+test("native pin validation runs before dependencies are installed", () => {
+  const { execFileSync } = require("node:child_process");
+  const modulePath = require.resolve("../../scripts/lib/arm64-native-pins");
+  const output = execFileSync(
+    process.execPath,
+    [
+      "-e",
+      `
+    const Module = require('node:module');
+    const load = Module._load;
+    Module._load = function(name, ...args) {
+      if (name !== process.argv[1]) throw Error('Pre-install check loaded a dependency: ' + name);
+      return load.call(this, name, ...args);
+    };
+    console.log(JSON.stringify(require(process.argv[1]).changedNativeDependencies({packages:{}}, {packages:{}})));
+  `,
+      modulePath,
+    ],
+    { encoding: "utf8", windowsHide: true }
+  );
+  assert.equal(output.trim(), "[]");
+});
 test("upgrade publication requires retained data and actual NPU execution after the exact previous version", () => {
   const { assertUpgradeEvidence } = require("../../scripts/lib/arm64-release");
   const report = {

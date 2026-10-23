@@ -27,7 +27,7 @@ const changedPins = git(
   "scripts/lib/download-utils.js",
   "scripts/lib/windows-arm64-tools.js"
 );
-const dependencyChanges = require("./lib/arm64-release").changedNativeDependencies(
+const dependencyChanges = require("./lib/arm64-native-pins").changedNativeDependencies(
   JSON.parse(git("show", "origin/arm64:package-lock.json")),
   JSON.parse(fs.readFileSync("package-lock.json", "utf8"))
 );
