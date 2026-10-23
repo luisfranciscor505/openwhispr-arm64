@@ -3,6 +3,39 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
+test("runner hook accepts only the maintained workflow and rejects contributor jobs", () => {
+  const { spawnSync } = require("node:child_process");
+  const trusted = {
+    GITHUB_REPOSITORY: "luisfranciscor505/openwhispr-arm64",
+    GITHUB_EVENT_NAME: "workflow_dispatch",
+    GITHUB_REF: "refs/heads/arm64",
+    GITHUB_WORKFLOW_REF:
+      "luisfranciscor505/openwhispr-arm64/.github/workflows/arm64-release.yml@refs/heads/arm64",
+  };
+  const run = (overrides) =>
+    spawnSync(
+      process.execPath,
+      [path.resolve(__dirname, "../../scripts/arm64-runner-job-policy.js")],
+      {
+        env: { ...process.env, ...trusted, ...overrides },
+        windowsHide: true,
+      }
+    ).status;
+  assert.equal(run({}), 0);
+  for (const overrides of [
+    { GITHUB_REPOSITORY: "contributor/fork" },
+    { GITHUB_EVENT_NAME: "pull_request" },
+    { GITHUB_EVENT_NAME: "pull_request_target" },
+    { GITHUB_REF: "refs/heads/contributor" },
+    {
+      GITHUB_WORKFLOW_REF: trusted.GITHUB_WORKFLOW_REF.replace(
+        "arm64-release.yml",
+        "untrusted.yml"
+      ),
+    },
+  ])
+    assert.equal(run(overrides), 1);
+});
 const { selectRelease } = require("../../scripts/sync-arm64-upstream");
 test("finishes an existing owned candidate before creating another and ignores external PR heads", () => {
   const { selectCandidate } = require("../../scripts/sync-arm64-upstream");

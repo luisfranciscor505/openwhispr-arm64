@@ -21,8 +21,8 @@ Only a verified candidate PR is merged. The runner's administrator-owned job hoo
 refuses all jobs except this repository's release workflow dispatched from
 `arm64`, before checkout. External contributors also require workflow approval;
 never approve a contributor workflow for local execution.
-The protected CMD hook launches the policy script with a process-scoped
-PowerShell execution policy; machine and account execution policies stay intact.
+The protected JavaScript hook uses the runner's bundled Node runtime; machine
+and account PowerShell execution policies stay intact.
 After changing the hook, run `scripts/secure-arm64-runner.ps1` elevated to deploy
 it and restart the service. Start a fresh release run after verification setup
 failures: rerunning only failed jobs deliberately fails the run-attempt binding.
