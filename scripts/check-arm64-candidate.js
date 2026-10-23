@@ -18,6 +18,7 @@ const changedPins = git(
   "origin/arm64",
   "HEAD",
   "--",
+  "electron-builder.arm64-win.cjs",
   "src/models/whisperNpuManifest.json",
   "native/whisper-npu",
   "scripts/build-whisper-npu.js",
@@ -26,9 +27,13 @@ const changedPins = git(
   "scripts/lib/download-utils.js",
   "scripts/lib/windows-arm64-tools.js"
 );
-if (changedPins)
+const dependencyChanges = require("./lib/arm64-release").changedNativeDependencies(
+  JSON.parse(git("show", "origin/arm64:package-lock.json")),
+  JSON.parse(fs.readFileSync("package-lock.json", "utf8"))
+);
+if (changedPins || dependencyChanges.length)
   throw new Error(
-    `Native/model pin changes require a separate validated port release: ${changedPins}`
+    `Native/model pin changes require a separate validated port release: ${changedPins} ${dependencyChanges.join(", ")}`
   );
 if (!release.publicKey.startsWith("-----BEGIN PUBLIC KEY-----"))
   throw new Error("Missing update trust key");

@@ -73,6 +73,28 @@ test("retries an expired offline runner queue, but never hides failed NPU tests"
   );
 });
 const { hash, assertEvidence } = require("../../scripts/lib/arm64-release");
+test("upstream sync cannot silently upgrade pinned native runtimes or ARM64 binaries", () => {
+  const { changedNativeDependencies } = require("../../scripts/lib/arm64-release");
+  const before = {
+    packages: {
+      "node_modules/electron": { version: "41.10.7", integrity: "old" },
+      "node_modules/@napi-rs/keyring-win32-arm64-msvc": { version: "1.3.0" },
+      "node_modules/native-addon": { version: "1", os: ["win32"], cpu: ["arm64"] },
+      "node_modules/react": { version: "19.0.0" },
+    },
+  };
+  const after = JSON.parse(JSON.stringify(before));
+  after.packages["node_modules/react"].version = "19.1.0";
+  assert.deepEqual(changedNativeDependencies(before, after), []);
+  after.packages["node_modules/electron"].integrity = "replaced bytes";
+  after.packages["node_modules/native-addon"].version = "2";
+  delete after.packages["node_modules/@napi-rs/keyring-win32-arm64-msvc"];
+  assert.deepEqual(changedNativeDependencies(before, after).sort(), [
+    "node_modules/@napi-rs/keyring-win32-arm64-msvc",
+    "node_modules/electron",
+    "node_modules/native-addon",
+  ]);
+});
 test("upgrade publication requires retained data and actual NPU execution after the exact previous version", () => {
   const { assertUpgradeEvidence } = require("../../scripts/lib/arm64-release");
   const report = {
