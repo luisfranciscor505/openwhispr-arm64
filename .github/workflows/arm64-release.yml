@@ -12,6 +12,10 @@ on:
         description: 'Check the isolated runner setup without building or publishing'
         default: false
         type: boolean
+      diagnostic_run_id:
+        description: 'Optional signed candidate build run for preflight diagnostics (never publishes)'
+        default: ''
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -21,13 +25,23 @@ jobs:
   runner-preflight:
     if: github.repository == 'luisfranciscor505/openwhispr-arm64' && github.ref == 'refs/heads/arm64' && inputs.runner_preflight
     runs-on: [self-hosted, Windows, ARM64, snapdragon-npu]
-    timeout-minutes: 10
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+    defaults:
+      run:
+        shell: cmd
     steps:
       - name: Verify generated PowerShell scripts can run under the service account
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           Write-Output "Runner process execution policy: $(Get-ExecutionPolicy)"
+      - uses: actions/checkout@v4
+        if: inputs.diagnostic_run_id != ''
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -35,6 +49,41 @@ jobs:
       - name: Verify native Node and isolated account
         shell: cmd
         run: node -e "const a=require('node:assert/strict'); a.equal(process.arch,'arm64'); a.equal(require('node:os').userInfo().username.toLowerCase(),'openwhisprverify'); console.log('Native ARM64 runner account verified');"
+      - name: Validate diagnostic build identifier
+        if: inputs.diagnostic_run_id != ''
+        env:
+          DIAGNOSTIC_RUN_ID: ${{ inputs.diagnostic_run_id }}
+        run: node -e "require('node:assert/strict').match(process.env.DIAGNOSTIC_RUN_ID,/^[1-9][0-9]*$/)"
+      - run: npm ci --ignore-scripts
+        if: inputs.diagnostic_run_id != ''
+      - run: node node_modules/electron/install.js
+        if: inputs.diagnostic_run_id != ''
+      - uses: actions/download-artifact@v4
+        if: inputs.diagnostic_run_id != ''
+        with:
+          name: arm64-candidate
+          path: candidate-diagnostic
+          run-id: ${{ inputs.diagnostic_run_id }}
+          github-token: ${{ github.token }}
+      - run: tar -xf candidate-diagnostic/candidate.zip -C candidate-diagnostic
+        if: inputs.diagnostic_run_id != ''
+      - uses: actions/download-artifact@v4
+        if: inputs.diagnostic_run_id != ''
+        with:
+          name: arm64-candidate-manifest
+          path: candidate-diagnostic
+          run-id: ${{ inputs.diagnostic_run_id }}
+          github-token: ${{ github.token }}
+      - name: Diagnose exact signed candidate under isolated account
+        if: inputs.diagnostic_run_id != ''
+        env:
+          DIAGNOSTIC_RUN_ID: ${{ inputs.diagnostic_run_id }}
+        run: node scripts/verify-arm64-candidate.js candidate-diagnostic --diagnostic-build-run %DIAGNOSTIC_RUN_ID%
+      - uses: actions/upload-artifact@v4
+        if: always() && inputs.diagnostic_run_id != ''
+        with:
+          name: arm64-runner-diagnostic
+          path: candidate-diagnostic/hardware-verification.json
   resolve:
     if: github.repository == 'luisfranciscor505/openwhispr-arm64' && github.ref == 'refs/heads/arm64' && !inputs.runner_preflight
     runs-on: ubuntu-latest

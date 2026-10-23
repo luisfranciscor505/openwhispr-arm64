@@ -27,6 +27,14 @@ After changing the hook, run `scripts/secure-arm64-runner.ps1` elevated to deplo
 it and restart the service. Start a fresh release run after verification setup
 failures: rerunning only failed jobs deliberately fails the run-attempt binding.
 
+To check runner configuration without a cloud build, dispatch the release
+workflow with `runner_preflight=true`. It checks the isolated account, native
+Node, and the runner-only PowerShell process policy. Normal hardware steps use
+CMD. To diagnose an existing signed candidate while a new build runs, also pass
+`diagnostic_run_id=<build run ID>`. The diagnostic verifies the manifest and
+installer, installs under the dedicated account, and runs NPU/CPU/UI checks.
+Its report is explicitly diagnostic and cannot satisfy the publication gate.
+
 For a port-only fix, increment `portRevision` in `arm64-release.json`, merge the
 change to `arm64`, then dispatch the release workflow with candidate `arm64`.
 Never overwrite release assets or reuse a published version. `vX.Y.Z-arm64.N`

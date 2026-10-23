@@ -222,6 +222,8 @@ test("publication requires complete hardware evidence for the exact run, source 
       { arch: "x64" },
       { sourceCommit: "stale" },
       { runId: "old" },
+      { runAttempt: "2" },
+      { diagnostic: true },
       { npu: false },
       { multilingual: false },
       { cpuFallback: false },

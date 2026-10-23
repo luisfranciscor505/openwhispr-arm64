@@ -12,6 +12,7 @@ const { changedNativeDependencies } = require("./arm64-native-pins");
 function assertEvidence(provenance, report, installer) {
   if (
     report.success !== true ||
+    report.diagnostic === true ||
     report.sourceCommit !== provenance.sourceCommit ||
     report.installerSha256 !== provenance.installerSha256 ||
     hash(installer) !== provenance.installerSha256 ||

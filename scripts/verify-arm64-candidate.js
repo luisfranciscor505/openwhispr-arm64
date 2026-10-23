@@ -5,6 +5,9 @@ const assert = require("node:assert/strict");
 const { execFileSync } = require("node:child_process");
 const { hash } = require("./lib/arm64-release");
 const { assertPeArchitecture } = require("../src/helpers/peArchitecture");
+const { verifyManifest, verifyInstaller } = require("../src/helpers/arm64UpdateManifest");
+const diagnosticIndex = process.argv.indexOf("--diagnostic-build-run");
+const diagnosticRun = diagnosticIndex >= 0 ? process.argv[diagnosticIndex + 1] : null;
 const root = path.resolve(__dirname, "..");
 const candidate = path.resolve(process.argv[2] || "dist-arm64");
 const provenance = JSON.parse(fs.readFileSync(path.join(candidate, "provenance.json"), "utf8"));
@@ -18,6 +21,9 @@ const report = {
   installerSha256: provenance.installerSha256,
   runId: provenance.runId,
   runAttempt: provenance.runAttempt,
+  diagnostic: diagnosticIndex >= 0,
+  verificationRunId: process.env.GITHUB_RUN_ID,
+  verificationAttempt: process.env.GITHUB_RUN_ATTEMPT,
 };
 const run = (exe, args, env = {}) =>
   execFileSync(exe, args, {
@@ -38,9 +44,23 @@ async function verify() {
       "openwhisprverify",
       "Use the dedicated OpenWhisprVerify Windows account"
     );
-    assert.equal(provenance.sourceCommit, process.env.CANDIDATE_SHA);
-    assert.equal(provenance.runId, process.env.GITHUB_RUN_ID);
-    assert.equal(provenance.runAttempt, process.env.GITHUB_RUN_ATTEMPT);
+    if (diagnosticIndex >= 0) {
+      assert.match(diagnosticRun || "", /^[1-9][0-9]*$/);
+      assert.equal(provenance.runId, diagnosticRun);
+    } else {
+      assert.equal(provenance.sourceCommit, process.env.CANDIDATE_SHA);
+      assert.equal(provenance.runId, process.env.GITHUB_RUN_ID);
+      assert.equal(provenance.runAttempt, process.env.GITHUB_RUN_ATTEMPT);
+    }
+    const manifest = verifyManifest(
+      JSON.parse(fs.readFileSync(path.join(candidate, "arm64-update.json"))),
+      require("../arm64-release.json").publicKey,
+      "0.0.0"
+    );
+    assert.equal(manifest.sourceCommit, provenance.sourceCommit);
+    assert.equal(manifest.upstreamCommit, provenance.upstreamCommit);
+    assert.equal(manifest.version, provenance.version);
+    await verifyInstaller(installer, manifest);
     assert.equal(hash(installer), provenance.installerSha256);
     run(installer, ["/S", `/D=${installed}`]);
     for (const item of provenance.inventory) {
@@ -85,10 +105,12 @@ async function verify() {
     assert.equal(ui.success, true);
     assert.equal(ui.ipc, true);
     report.rendererIpc = true;
-    Object.assign(
-      report,
-      await require("./verify-arm64-update-cycle").verifyCycle(candidate, work)
-    );
+    if (diagnosticIndex < 0) {
+      Object.assign(
+        report,
+        await require("./verify-arm64-update-cycle").verifyCycle(candidate, work)
+      );
+    } else report.updateCycle = "diagnostic";
     report.success = true;
   } catch (error) {
     // Public evidence contains no account paths, profile contents, or screenshots.
