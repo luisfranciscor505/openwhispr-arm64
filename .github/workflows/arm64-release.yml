@@ -17,6 +17,9 @@ jobs:
   resolve:
     if: github.repository == 'luisfranciscor505/openwhispr-arm64' && github.ref == 'refs/heads/arm64'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
     outputs:
       sha: ${{ steps.resolve.outputs.sha }}
     steps:
@@ -31,6 +34,16 @@ jobs:
           SHA=$(git rev-parse "origin/$CANDIDATE^{commit}")
           git merge-base --is-ancestor origin/arm64 "$SHA"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+      - name: Mark synchronization candidate pending
+        if: inputs.candidate != 'arm64'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$CANDIDATE_SHA" \
+            -f state=pending -f context=arm64/verified-release \
+            -f description='ARM64 build and Snapdragon hardware verification pending' \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
   build:
     needs: resolve
     runs-on: windows-11-arm
@@ -180,3 +193,26 @@ jobs:
         run: |
           PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$CANDIDATE" --json number --jq '.[0].number')
           gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$CANDIDATE_SHA"
+  report:
+    if: always() && needs.resolve.result == 'success' && inputs.candidate != 'arm64'
+    needs: [resolve, build, sign, hardware, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write
+    steps:
+      - name: Attach verification outcome to synchronization PR commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ needs.resolve.outputs.sha }}
+          PUBLISHED: ${{ needs.publish.result }}
+        run: |
+          STATE=failure
+          DESCRIPTION='ARM64 release blocked; inspect build and hardware checks'
+          if [[ "$PUBLISHED" == success ]]; then
+            STATE=success
+            DESCRIPTION='ARM64 installer and NPU hardware verified; release published'
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$CANDIDATE_SHA" \
+            -f state="$STATE" -f context=arm64/verified-release \
+            -f description="$DESCRIPTION" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
