@@ -1,0 +1,9 @@
+{
+  "requestedTag": "v1.11.0",
+  "upstreamCommit": "b9e9ebefac4b961456c269164a93ddfdd53438b9",
+  "blocked": true,
+  "conflicts": [
+    "src/helpers/ipcHandlers.js",
+    "src/models/modelRegistryData.json"
+  ]
+}
