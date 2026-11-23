@@ -10,7 +10,15 @@ if (
 )
   throw new Error("Upstream synchronization has unresolved conflicts");
 git("merge-base", "--is-ancestor", release.upstreamCommit, "HEAD");
-if (git("rev-parse", `${release.upstreamTag}^{commit}`) !== release.upstreamCommit)
+if (!/^v\d+\.\d+\.\d+$/.test(release.upstreamTag))
+  throw new Error("Invalid stable upstream release tag");
+const tagRef = `refs/tags/${release.upstreamTag}`;
+const tagRefs = new Map(
+  git("ls-remote", "https://github.com/OpenWhispr/openwhispr.git", tagRef, `${tagRef}^{}`)
+    .split(/\r?\n/)
+    .map((line) => line.split("\t").reverse())
+);
+if ((tagRefs.get(`${tagRef}^{}`) ?? tagRefs.get(tagRef)) !== release.upstreamCommit)
   throw new Error("Upstream tag/commit mismatch");
 const changedPins = git(
   "diff",
@@ -27,9 +35,15 @@ const changedPins = git(
   "scripts/lib/download-utils.js",
   "scripts/lib/windows-arm64-tools.js"
 );
-const dependencyChanges = require("./lib/arm64-native-pins").changedNativeDependencies(
-  JSON.parse(git("show", "origin/arm64:package-lock.json")),
-  JSON.parse(fs.readFileSync("package-lock.json", "utf8"))
+const { changedNativeDependencies } = require("./lib/arm64-native-pins");
+const previousLock = JSON.parse(git("show", "origin/arm64:package-lock.json"));
+const upstreamLock = JSON.parse(git("show", `${release.upstreamCommit}:package-lock.json`));
+const candidateLock = JSON.parse(fs.readFileSync("package-lock.json", "utf8"));
+// Official release pins still pass the native build and hardware gate. New pins that
+// differ from both the published fork and the verified upstream tag require review.
+const forkOnlyPins = new Set(changedNativeDependencies(upstreamLock, candidateLock));
+const dependencyChanges = changedNativeDependencies(previousLock, candidateLock).filter((name) =>
+  forkOnlyPins.has(name)
 );
 if (changedPins || dependencyChanges.length)
   throw new Error(
