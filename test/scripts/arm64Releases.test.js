@@ -47,11 +47,29 @@ test("finishes an existing owned candidate before creating another and ignores e
     "v1.10.5"
   );
   assert.equal(
-    selectCandidate(releases, "v1.10.4", [{ headRefName: "sync/v1.10.5", isCrossRepository: true }])
+    selectCandidate(releases, "v1.10.4", [{ headRefName: "sync/v1.10.6", isCrossRepository: true }])
       .tag_name,
+    "v1.10.5"
+  );
+  assert.equal(
+    selectCandidate(releases, "v1.10.5", [
+      { headRefName: "sync/v1.10.5", isCrossRepository: false },
+    ]).tag_name,
     "v1.10.6"
   );
+  assert.equal(selectRelease(releases, "v1.10.4").tag_name, "v1.10.5");
 });
+
+test("dispatches repaired or previously unqueued candidates once", () => {
+  const { canDispatchUnverifiedCandidate } = require("../../scripts/sync-arm64-upstream");
+  const completed = { status: "completed" };
+  assert.equal(canDispatchUnverifiedCandidate(null, ""), true);
+  assert.equal(canDispatchUnverifiedCandidate({ status: "queued" }, ""), false);
+  assert.equal(canDispatchUnverifiedCandidate(completed, ""), true);
+  assert.equal(canDispatchUnverifiedCandidate(completed, "failure"), false);
+  assert.equal(canDispatchUnverifiedCandidate(null, "success"), false);
+});
+
 test("retries an expired offline runner queue, but never hides failed NPU tests", () => {
   const { shouldRetryOffline } = require("../../scripts/sync-arm64-upstream");
   const run = { status: "completed", conclusion: "failure" };
