@@ -10,8 +10,8 @@ const root = path.resolve(__dirname, "..");
 const bin = path.join(root, "resources", "bin");
 const cache = path.join(root, ".cache", "arm64");
 const FFMPEG = {
-  url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-20-13-08/ffmpeg-n8.1.3-18-g46d899d7a0-winarm64-lgpl-8.1.zip",
-  sha256: "423412912c5100c4e4e852f1c47803ec4ba5843b421100cf4938056619420fd6",
+  url: "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-31-12-59/ffmpeg-n8.1.3-27-g8dca1586f4-winarm64-lgpl-8.1.zip",
+  sha256: "c918142d3920f6b15282739dd523885be0586cbd8684f400acea9d4a8c97002f",
 };
 const WHISPER_COMMIT = "6ac14546046ffb17d144a08bcad65337e535cf5f";
 
