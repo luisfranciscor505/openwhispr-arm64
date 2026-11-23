@@ -1,4 +1,6 @@
+const { app, autoUpdater: nativeUpdater } = require("electron");
 const { autoUpdater } = require("electron-updater");
+const UpdateHttpExecutor = require("./helpers/updateHttpExecutor");
 
 // electron-updater can only replace an AppImage on Linux; deb, rpm and tar.gz
 // installs are updated by the package manager instead.
@@ -12,7 +14,7 @@ const isUpdaterSupported =
   !updatesDisabled && (process.platform !== "linux" || Boolean(process.env.APPIMAGE));
 
 class UpdateManager {
-  constructor() {
+  constructor({ getPolicy = null } = {}) {
     this.updateAvailable = false;
     this.updateDownloaded = false;
     this.lastUpdateInfo = null;
@@ -20,6 +22,8 @@ class UpdateManager {
     this.isDownloading = false;
     this.isQuittingForUpdate = false;
     this.handleBeforeQuitForUpdate = null;
+    this.handleNativeUpdateDownloaded = null;
+    this.handleBeforeQuit = null;
     this.eventListeners = [];
     this.updateCheckInterval = null;
     this.windowManager = null;
@@ -28,6 +32,31 @@ class UpdateManager {
     this.verifiedManifests = new Map();
     this.canInstall = () => true;
     this.prepareInstall = async () => {};
+    this.getPolicy = getPolicy;
+    // Whether new activity has the current credential's verdict.
+    this.policyReady = getPolicy === null;
+    // Its lookup failed with nothing held, so only a retry can resolve it.
+    this.policyUnavailable = false;
+    // A check the policy refused, or work it cut short, checks again once the
+    // policy allows updates.
+    this.checkAwaitingPolicy = false;
+    // The verdict running work follows: the current one or, after
+    // invalidatePolicy, the previous one until the next lands. null while
+    // nothing allows updates.
+    this.updateMode = getPolicy === null ? "user_choice" : null;
+    this.policyRevision = -1;
+    // Bumped by invalidatePolicy, so a lookup for the previous credential never lands.
+    this.lookupEpoch = 0;
+    // Bumped when the policy ends running work, so its results never land.
+    this.workEpoch = 0;
+    this.checkEpoch = null;
+    this.checkPromise = null;
+    this.downloadEpoch = null;
+    this.downloadPromise = null;
+    this.requestCleanup = null;
+    this.updateCancellationToken = null;
+    this.installDeferred = false;
+    this.startupCheckTimeout = null;
 
     this.setupAutoUpdater();
   }
@@ -41,6 +70,11 @@ class UpdateManager {
     if (process.env.NODE_ENV === "development") {
       return;
     }
+
+    this.httpExecutor = new UpdateHttpExecutor((info, callback) =>
+      autoUpdater.emit("login", info, callback)
+    );
+    autoUpdater.httpExecutor = this.httpExecutor;
 
     if (isManagedArm64Build) {
       const { Arm64UpdateProvider } = require("./helpers/arm64UpdateProvider");
@@ -93,7 +127,7 @@ class UpdateManager {
     }
 
     autoUpdater.autoDownload = false;
-    autoUpdater.autoInstallOnAppQuit = !isManagedArm64Build;
+    this._syncInstallOnQuit();
     autoUpdater.logger = console;
 
     this.setupEventHandlers();
@@ -102,9 +136,11 @@ class UpdateManager {
   setupEventHandlers() {
     const handlers = {
       "checking-for-update": () => {
+        if (!this._eventsAllowed()) return;
         this.notifyRenderers("checking-for-update");
       },
       "update-available": (info) => {
+        if (!this._eventsAllowed()) return;
         this.updateAvailable = true;
         if (info) {
           this.lastUpdateInfo = {
@@ -118,6 +154,7 @@ class UpdateManager {
         this._autoDownloadIfEnabled();
       },
       "update-not-available": (info) => {
+        if (!this._eventsAllowed()) return;
         this.updateAvailable = false;
         if (!this.updateDownloaded) {
           this.isDownloading = false;
@@ -128,15 +165,17 @@ class UpdateManager {
       error: (err) => {
         console.error("❌ Auto-updater error:", err);
         this.isDownloading = false;
-        this.notifyRenderers("update-error", err);
+        if (this._eventsAllowed()) this.notifyRenderers("update-error", err);
       },
       "download-progress": (progressObj) => {
+        if (!this._eventsAllowed()) return;
         console.log(
           `📥 Download progress: ${progressObj.percent.toFixed(2)}% (${(progressObj.transferred / 1024 / 1024).toFixed(2)}MB / ${(progressObj.total / 1024 / 1024).toFixed(2)}MB)`
         );
         this.notifyRenderers("update-download-progress", progressObj);
       },
       "update-downloaded": (info) => {
+        if (!this._eventsAllowed()) return;
         console.log("✅ Update downloaded successfully:", info?.version);
         this.updateDownloaded = true;
         this.downloadedFile = info?.downloadedFile;
@@ -168,7 +207,16 @@ class UpdateManager {
         this.windowManager.hotkeyManager.unregisterAll();
       }
     };
-    require("electron").autoUpdater.on("before-quit-for-update", this.handleBeforeQuitForUpdate);
+    nativeUpdater.on("before-quit-for-update", this.handleBeforeQuitForUpdate);
+    if (process.platform === "darwin") {
+      this.handleNativeUpdateDownloaded = () => this._notifyStatus();
+      nativeUpdater.on("update-downloaded", this.handleNativeUpdateDownloaded);
+    } else {
+      // main.js ends a quit with app.exit(), which skips will-quit but not the
+      // quit event NSIS and AppImage install from.
+      this.handleBeforeQuit = () => this._syncInstallOnQuit({ quitting: true });
+      app.on("before-quit", this.handleBeforeQuit);
+    }
   }
 
   notifyRenderers(channel, data) {
@@ -184,6 +232,13 @@ class UpdateManager {
 
   async checkForUpdates() {
     try {
+      if (this.getPolicy) await this.refreshPolicy();
+      if (!this._policyFailure() && this.requestCleanup) await this.requestCleanup;
+      const failure = this._policyFailure();
+      if (failure) {
+        this.checkAwaitingPolicy = true;
+        return { ...failure, updateAvailable: false };
+      }
       if (process.env.NODE_ENV === "development") {
         return {
           updateAvailable: false,
@@ -200,24 +255,17 @@ class UpdateManager {
         };
       }
 
-      console.log("🔍 Checking for updates...");
-      const result = await autoUpdater.checkForUpdates();
+      if (this.checkPromise) return this.checkPromise;
 
-      if (result?.isUpdateAvailable && result?.updateInfo) {
-        console.log("📋 Update available:", result.updateInfo.version);
-        return {
-          updateAvailable: true,
-          version: result.updateInfo.version,
-          releaseDate: result.updateInfo.releaseDate,
-          files: result.updateInfo.files,
-          releaseNotes: result.updateInfo.releaseNotes,
-        };
-      } else {
-        console.log("✅ Already on latest version");
-        return {
-          updateAvailable: false,
-          message: "You are running the latest version",
-        };
+      this.httpExecutor.resumeRequests();
+      const epoch = this.workEpoch;
+      this.checkEpoch = epoch;
+      this.checkPromise = this._checkForUpdates(epoch);
+      try {
+        return await this.checkPromise;
+      } finally {
+        this.checkPromise = null;
+        this.checkEpoch = null;
       }
     } catch (error) {
       console.error("❌ Update check error:", error);
@@ -225,9 +273,43 @@ class UpdateManager {
     }
   }
 
+  async _checkForUpdates(epoch) {
+    console.log("🔍 Checking for updates...");
+    const result = await autoUpdater.checkForUpdates().catch((error) => {
+      if (epoch !== this.workEpoch) return null;
+      throw error;
+    });
+    if (epoch !== this.workEpoch) {
+      result?.cancellationToken?.cancel();
+      return { ...(this._policyFailure() ?? this._policyChanged()), updateAvailable: false };
+    }
+    // A running download keeps the token it was started with, for an abort to cancel.
+    if (!this.downloadPromise) this.updateCancellationToken = result?.cancellationToken ?? null;
+    this.checkEpoch = null;
+    this._autoDownloadIfEnabled();
+
+    if (result?.isUpdateAvailable && result?.updateInfo) {
+      console.log("📋 Update available:", result.updateInfo.version);
+      return {
+        updateAvailable: true,
+        version: result.updateInfo.version,
+        releaseDate: result.updateInfo.releaseDate,
+        files: result.updateInfo.files,
+        releaseNotes: result.updateInfo.releaseNotes,
+      };
+    } else {
+      console.log("✅ Already on latest version");
+      return {
+        updateAvailable: false,
+        message: "You are running the latest version",
+      };
+    }
+  }
+
   async downloadUpdate() {
     if (updatesDisabled)
       return { success: false, message: "Updates are disabled for this local ARM64 build" };
+    let started = false;
     try {
       if (process.env.NODE_ENV === "development") {
         return {
@@ -235,6 +317,16 @@ class UpdateManager {
           message: "Update downloads are disabled in development mode",
         };
       }
+
+      if (!isUpdaterSupported)
+        return {
+          success: false,
+          message: "Updates are installed through the system package manager",
+        };
+      if (this.getPolicy) await this.refreshPolicy();
+      if (!this._policyFailure() && this.requestCleanup) await this.requestCleanup;
+      const failure = this._policyFailure();
+      if (failure) return failure;
 
       if (this.isDownloading) {
         return {
@@ -251,15 +343,30 @@ class UpdateManager {
       }
 
       this.isDownloading = true;
+      started = true;
+      this.httpExecutor.resumeRequests();
+      const epoch = this.workEpoch;
+      this.downloadEpoch = epoch;
       console.log("📥 Starting update download...");
-      await autoUpdater.downloadUpdate();
+      this.downloadPromise = autoUpdater.downloadUpdate(this.updateCancellationToken ?? undefined);
+      await this.downloadPromise;
+      if (epoch !== this.workEpoch) return this._policyFailure() ?? this._policyChanged();
       console.log("📥 Download initiated successfully");
 
       return { success: true, message: "Update download started" };
     } catch (error) {
       this.isDownloading = false;
+      if (started && this.downloadEpoch !== this.workEpoch) {
+        return this._policyFailure() ?? this._policyChanged();
+      }
       console.error("❌ Update download error:", error);
       throw error;
+    } finally {
+      if (started) {
+        this.isDownloading = false;
+        this.downloadEpoch = null;
+        this.downloadPromise = null;
+      }
     }
   }
 
@@ -274,6 +381,15 @@ class UpdateManager {
         };
       }
 
+      if (!isUpdaterSupported)
+        return {
+          success: false,
+          message: "Updates are installed through the system package manager",
+        };
+      if (this.getPolicy) await this.refreshPolicy();
+      const failure = this._policyFailure();
+      if (failure) return failure;
+
       if (!this.updateDownloaded) {
         return {
           success: false,
@@ -281,53 +397,63 @@ class UpdateManager {
         };
       }
 
-      if (this.isInstalling) {
-        return {
-          success: false,
-          message: "Update installation already in progress",
-        };
-      }
-
-      if (isManagedArm64Build) {
-        if (!this.canInstall()) {
-          return {
-            success: false,
-            message: "Finish recording or transcription before restarting to update.",
-          };
-        }
-        this.isInstalling = true;
-        const { verifyInstaller } = require("./helpers/arm64UpdateManifest");
-        await verifyInstaller(
-          this.downloadedFile,
-          this.verifiedManifests.get(this.downloadedVersion)
-        );
-        if (!this.canInstall()) {
-          this.isInstalling = false;
-          return { success: false, message: "Transcription is still active." };
-        }
-        await this.prepareInstall();
-        await verifyInstaller(
-          this.downloadedFile,
-          this.verifiedManifests.get(this.downloadedVersion)
-        );
-      }
-      this.isInstalling = true;
-      console.log("🔄 Installing update and restarting...");
-
-      const isSilent = process.platform === "win32";
-      autoUpdater.quitAndInstall(isSilent, true);
-
-      return { success: true, message: "Update installation started" };
+      return this._quitAndInstall();
     } catch (error) {
-      this.isInstalling = false;
       console.error("❌ Update installation error:", error);
       throw error;
     }
   }
 
+  // Squirrel.Mac installs a staged update on any quit whatever the policy, so a
+  // restart hands it over instead of racing app.relaunch().
+  async restartIntoStagedUpdate() {
+    if (!this.hasStagedUpdate()) return { success: false, message: "No update is staged" };
+    return this._quitAndInstall();
+  }
+
+  async _quitAndInstall() {
+    if (this.isInstalling) {
+      return {
+        success: false,
+        message: "Update installation already in progress",
+      };
+    }
+
+    this.isInstalling = true;
+    let installing = false;
+    try {
+      if (isManagedArm64Build) {
+        const failure = this._policyFailure();
+        if (failure) return failure;
+        const busy = {
+          success: false,
+          message: "Finish recording or transcription before updating.",
+        };
+        if (!this.canInstall()) return busy;
+        const epoch = this.workEpoch;
+        const file = this.downloadedFile;
+        const manifest = this.verifiedManifests.get(this.downloadedVersion);
+        const { verifyInstaller } = require("./helpers/arm64UpdateManifest");
+        await verifyInstaller(file, manifest);
+        if (!this.canInstall()) return busy;
+        if (epoch !== this.workEpoch) return this._policyChanged();
+        await this.prepareInstall();
+        await verifyInstaller(file, manifest);
+        if (epoch !== this.workEpoch) return this._policyChanged();
+        if (!this.canInstall()) return busy;
+      }
+      console.log("🔄 Installing update and restarting...");
+      const isSilent = process.platform === "win32";
+      autoUpdater.quitAndInstall(isSilent, true);
+      installing = true;
+      return { success: true, message: "Update installation started" };
+    } finally {
+      if (!installing) this.isInstalling = false;
+    }
+  }
+
   async getAppVersion() {
     try {
-      const { app } = require("electron");
       return {
         version: app.getVersion(),
         ...(isManagedArm64Build
@@ -343,8 +469,13 @@ class UpdateManager {
   async getUpdateStatus() {
     try {
       return {
-        updateAvailable: this.updateAvailable,
-        updateDownloaded: this.updateDownloaded,
+        updateAvailable: this._eventsAllowed() && this.updateAvailable,
+        updateDownloaded: this._eventsAllowed() && this.updateDownloaded,
+        updateMode: this.updateMode,
+        policyReady: this.policyReady,
+        policyUnavailable: this.policyUnavailable,
+        effectiveAutoUpdatesEnabled: this._automaticUpdatesSelected(),
+        stagedUpdate: this.hasStagedUpdate(),
         isDevelopment: process.env.NODE_ENV === "development",
         isSupported: isUpdaterSupported,
         ...(isManagedArm64Build
@@ -359,24 +490,185 @@ class UpdateManager {
 
   async getUpdateInfo() {
     try {
-      return this.lastUpdateInfo;
+      return this._eventsAllowed() ? this.lastUpdateInfo : null;
     } catch (error) {
       console.error("❌ Error getting update info:", error);
       throw error;
     }
   }
 
+  // What the toggle shows: the organization's choice, else the member's.
+  _automaticUpdatesSelected() {
+    return (
+      isUpdaterSupported &&
+      this.updateMode !== "it_managed" &&
+      (this.updateMode === "always_on" || this.autoUpdatesEnabled === true)
+    );
+  }
+
+  _automaticUpdatesEnabled() {
+    return this.policyReady && this._automaticUpdatesSelected();
+  }
+
+  _eventsAllowed() {
+    return (
+      this.updateMode !== null &&
+      this.updateMode !== "it_managed" &&
+      (this.checkEpoch === null || this.checkEpoch === this.workEpoch) &&
+      (this.downloadEpoch === null || this.downloadEpoch === this.workEpoch)
+    );
+  }
+
+  // electron-updater reads this as a download completes, to decide whether to
+  // install it on quit (Squirrel.Mac only gets the file if so), and NSIS and
+  // AppImage read it again as the app quits. The first follows the verdict the
+  // download runs under, so a pending lookup doesn't drop it; the second needs
+  // a current verdict.
+  _syncInstallOnQuit({ quitting = false } = {}) {
+    autoUpdater.autoInstallOnAppQuit =
+      !isManagedArm64Build &&
+      (quitting ? this.policyReady : this.updateMode !== null) &&
+      this.updateMode !== "it_managed" &&
+      !this.installDeferred;
+  }
+
+  _policyChanged() {
+    return {
+      success: false,
+      code: "UPDATE_POLICY_CHANGED",
+      message: "Update policy changed. Check for updates again.",
+    };
+  }
+
+  _policyFailure() {
+    if (!this.policyReady)
+      return {
+        success: false,
+        code: "UPDATE_POLICY_UNAVAILABLE",
+        message: "Organization update policy is unavailable.",
+      };
+    if (this.updateMode === "it_managed")
+      return {
+        success: false,
+        code: "UPDATES_MANAGED_BY_ORG",
+        message: "Your organization manages updates.",
+      };
+    return null;
+  }
+
+  _notifyStatus() {
+    void this.getUpdateStatus().then((status) =>
+      this.notifyRenderers("update-status-changed", status)
+    );
+  }
+
+  // Ends the check or download running and the update they found.
+  _abortWork() {
+    if (this.updateAvailable || this.checkPromise || this.downloadPromise) {
+      this.checkAwaitingPolicy = true;
+    }
+    this.workEpoch += 1;
+    this.updateCancellationToken?.cancel();
+    // The next download must not start on a cancelled token.
+    this.updateCancellationToken = null;
+    if (this.checkPromise || this.downloadPromise) {
+      // Cancelling the updater promise alone leaves its download request open.
+      this.httpExecutor.abortRequests();
+      const cleanup = Promise.allSettled([this.checkPromise, this.downloadPromise]).then(() => {
+        if (this.requestCleanup === cleanup) this.requestCleanup = null;
+      });
+      this.requestCleanup = cleanup;
+    }
+    this.updateAvailable = false;
+    if (!this.updateDownloaded) this.lastUpdateInfo = null;
+  }
+
+  // The credential or scope changed. New activity waits for its verdict, while
+  // a running check or download and the update it found keep the previous one
+  // until the next lands: only an IT-managed verdict ends them.
+  invalidatePolicy() {
+    this.lookupEpoch += 1;
+    this.policyRevision = -1;
+    this.policyReady = false;
+    this.policyUnavailable = false;
+    this._notifyStatus();
+  }
+
+  updatePolicy(snapshot) {
+    if (!snapshot?.success || (snapshot.managed && !snapshot.policy)) {
+      // A failed lookup says nothing new; an unreadable policy revokes.
+      if (snapshot?.success || snapshot?.code === "POLICY_UNRESOLVABLE") {
+        this._abortWork();
+        this.updateMode = null;
+        this.policyReady = false;
+        this.policyUnavailable = true;
+        this._syncInstallOnQuit();
+        this._notifyStatus();
+      } else if (!this.policyReady && !this.policyUnavailable) {
+        this.policyUnavailable = true;
+        this._notifyStatus();
+      }
+      return;
+    }
+    if (Number.isSafeInteger(snapshot.revision) && snapshot.revision < this.policyRevision) return;
+    const mode = snapshot.managed ? snapshot.policy?.updates?.mode : "user_choice";
+    const nextMode = mode === "always_on" || mode === "it_managed" ? mode : "user_choice";
+    const wasBlocked = !this.policyReady || this.updateMode === "it_managed";
+    const changed = !this.policyReady || this.updateMode !== nextMode;
+    if (nextMode === "it_managed" && this.updateMode !== "it_managed") this._abortWork();
+    this.policyRevision = snapshot.revision ?? this.policyRevision;
+    this.policyReady = true;
+    this.policyUnavailable = false;
+    this.updateMode = nextMode;
+    this._syncInstallOnQuit();
+    if (changed) {
+      this._notifyStatus();
+      this._autoDownloadIfEnabled();
+    }
+    if (wasBlocked && nextMode !== "it_managed" && this.checkAwaitingPolicy) {
+      this.checkAwaitingPolicy = false;
+      this._autoCheckForUpdates("Deferred");
+    }
+  }
+
+  // A held verdict answers at once and the network refreshes it behind, so
+  // nothing waits on a slow lookup; only a credential with none held waits.
+  async refreshPolicy() {
+    if (!this.getPolicy) return;
+    const epoch = this.lookupEpoch;
+    if (!this.policyReady) await this._lookupPolicy({ held: true });
+    if (epoch !== this.lookupEpoch) return;
+    if (this.policyReady) void this._lookupPolicy();
+    else await this._lookupPolicy();
+  }
+
+  async _lookupPolicy(options) {
+    const epoch = this.lookupEpoch;
+    let snapshot;
+    try {
+      snapshot = await this.getPolicy(options);
+    } catch {
+      snapshot = { success: false };
+    }
+    // With nothing held, the network lookup decides.
+    if (epoch === this.lookupEpoch && (snapshot?.success || !options?.held)) {
+      this.updatePolicy(snapshot);
+    }
+  }
+
   setAutoUpdatesEnabled(enabled) {
     this.autoUpdatesEnabled = enabled;
     // The startup check may have found an update before the renderer synced.
-    if (enabled) this._autoDownloadIfEnabled();
+    this._autoDownloadIfEnabled();
+    this._notifyStatus();
   }
 
   // NSIS and AppImage install a downloaded update from their quit handler, which would
   // replace the executable a reset relaunch starts (an AppImage even moves to a new
   // file name).
   deferInstallOnQuit() {
-    autoUpdater.autoInstallOnAppQuit = false;
+    this.installDeferred = true;
+    this._syncInstallOnQuit();
   }
 
   // On macOS a finished download is handed to Squirrel.Mac, which installs it on any
@@ -386,7 +678,8 @@ class UpdateManager {
   }
 
   _autoDownloadIfEnabled() {
-    if (!this.autoUpdatesEnabled || !this.updateAvailable) return;
+    if (!this._automaticUpdatesEnabled() || !this.updateAvailable || this.checkEpoch !== null)
+      return;
     // downloadUpdate() is a no-op while a download is in flight or complete;
     // failures surface through the shared "error" handler and the renderers.
     this.downloadUpdate().catch(() => {});
@@ -396,14 +689,15 @@ class UpdateManager {
   // updates are off; a failed background check is logged and never surfaced.
   _autoCheckForUpdates(label) {
     console.log(`🔄 ${label} update check...`);
-    autoUpdater.checkForUpdates().catch((err) => {
+    this.checkForUpdates().catch((err) => {
       console.error(`${label} update check failed:`, err);
     });
   }
 
   checkForUpdatesOnStartup() {
     if (process.env.NODE_ENV !== "development" && isUpdaterSupported) {
-      setTimeout(() => {
+      this.startupCheckTimeout = setTimeout(() => {
+        this.startupCheckTimeout = null;
         this._autoCheckForUpdates("Startup");
       }, 3000);
 
@@ -415,6 +709,12 @@ class UpdateManager {
   }
 
   cleanup() {
+    if (this.startupCheckTimeout) {
+      clearTimeout(this.startupCheckTimeout);
+      this.startupCheckTimeout = null;
+    }
+    this.updateCancellationToken?.cancel();
+    this.httpExecutor?.abortRequests();
     if (this.updateCheckInterval) {
       clearInterval(this.updateCheckInterval);
       this.updateCheckInterval = null;
@@ -424,11 +724,16 @@ class UpdateManager {
     });
     this.eventListeners = [];
     if (this.handleBeforeQuitForUpdate) {
-      require("electron").autoUpdater.removeListener(
-        "before-quit-for-update",
-        this.handleBeforeQuitForUpdate
-      );
+      nativeUpdater.removeListener("before-quit-for-update", this.handleBeforeQuitForUpdate);
       this.handleBeforeQuitForUpdate = null;
+    }
+    if (this.handleNativeUpdateDownloaded) {
+      nativeUpdater.removeListener("update-downloaded", this.handleNativeUpdateDownloaded);
+      this.handleNativeUpdateDownloaded = null;
+    }
+    if (this.handleBeforeQuit) {
+      app.removeListener("before-quit", this.handleBeforeQuit);
+      this.handleBeforeQuit = null;
     }
   }
 }

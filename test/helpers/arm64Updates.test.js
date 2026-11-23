@@ -145,7 +145,11 @@ test("managed updater prompts for restart, honors activity, and verifies before 
         arm64Release: { publicKey: pem, upstreamTag: "v1.10.4", portRevision: 1 },
       };
     if (request === "electron-updater") return { autoUpdater: updater };
-    if (request === "electron") return { autoUpdater: { on() {}, removeListener() {} } };
+    if (request === "electron")
+      return {
+        autoUpdater: { on() {}, removeListener() {} },
+        app: { on() {}, removeListener() {} },
+      };
     return originalLoad.call(this, request, parent, isMain);
   };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "arm64-updater-managed-"));

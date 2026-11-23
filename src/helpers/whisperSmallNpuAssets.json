@@ -1,0 +1,56 @@
+{
+  "version": "1",
+  "pythonPathFile": "python313._pth",
+  "python": {
+    "url": "https://www.python.org/ftp/python/3.13.17/python-3.13.17-embed-arm64.zip",
+    "size": 10813980,
+    "sha256": "7b58787a047b400edbfcb539aa3cdb4e2ed77bf0f22cae42b7c01cedd7dd6614"
+  },
+  "tokenizer": {
+    "url": "https://huggingface.co/openai/whisper-small/resolve/973afd24965f72e36ca33b3055d56a652f456b4d/tokenizer.json",
+    "size": 2480466,
+    "sha256": "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566"
+  },
+  "wheels": [
+    {
+      "url": "https://files.pythonhosted.org/packages/e4/04/d52c7016b04b6c5108f26691f9d33ec82a9b65d041f1a9c771137693d618/protobuf-7.36.2-py3-none-any.whl",
+      "size": 179806,
+      "sha256": "bdb3a345d48db958e6ce1f18e508beb0cc981d64f24088427549c866cd039f1e"
+    },
+    {
+      "url": "https://files.pythonhosted.org/packages/a0/f3/2af1ad3cd8b34de5471b80e75d82014a29eeb8a259cfc43512cccd317d0d/onnxruntime_qnn-2.8.0-cp313-cp313-win_arm64.whl",
+      "size": 63684903,
+      "sha256": "f892889085938bcc8db339d303a094ae049e6f54b7c6f45ba2bd1b0d0d2de872"
+    },
+    {
+      "url": "https://files.pythonhosted.org/packages/53/77/a476b6f73a661c11d113a342d2326b91506cf2285f0995d1212a6bb2022d/tokenizers-0.23.3-cp310-abi3-win_arm64.whl",
+      "size": 2742580,
+      "sha256": "7e48734d2de9260d86f03ab056d2cfeeff3869f61dbd49aaa15a2793b5f3458b"
+    },
+    {
+      "url": "https://files.pythonhosted.org/packages/39/1e/c0bcba1f8694116485fe28fd1be698c278fcda4141c5b0e53a2aed8b12a8/numpy-2.4.6-cp313-cp313-win_arm64.whl",
+      "size": 10222272,
+      "sha256": "a7c711e21628b52034bb5ab8d1bce291f752fcc5e92accc615778acee1ff4778"
+    },
+    {
+      "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl",
+      "size": 129956,
+      "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+    },
+    {
+      "url": "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl",
+      "size": 26661,
+      "sha256": "7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4"
+    },
+    {
+      "url": "https://files.pythonhosted.org/packages/83/22/d6a700e3a6322fa3d56fbe7cee9ffc53f35e77ffcd6b7e97f4b7722a27ab/onnxruntime-1.29.0-cp313-cp313-win_arm64.whl",
+      "size": 13747112,
+      "sha256": "4b940b0d777590c7e20bf298f5c16af1ea6ad1b400a1c822a6be192f64f4d954"
+    }
+  ],
+  "model": {
+    "url": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/whisper_small/releases/v0.67.0/whisper_small-precompiled_qnn_onnx-float-qualcomm_snapdragon_x_elite.zip",
+    "size": 573019507,
+    "sha256": "34772ab3ffea652dcca5341286c21e546228c418631be4a1db3165d62e438017"
+  }
+}

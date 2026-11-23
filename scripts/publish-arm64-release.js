@@ -11,6 +11,8 @@ const report = read("hardware-verification.json");
 const version = versionOf(release);
 const installer = path.join(output, `OpenWhispr-${version}-windows-arm64.exe`);
 assertEvidence(provenance, report, installer);
+if (report.whisperSmallNpu !== true)
+  throw new Error("Installed Whisper Small NPU verification is missing");
 if (
   provenance.sourceCommit !== process.env.CANDIDATE_SHA ||
   provenance.runId !== process.env.GITHUB_RUN_ID ||

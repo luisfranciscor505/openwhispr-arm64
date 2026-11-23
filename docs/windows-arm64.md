@@ -69,6 +69,24 @@ alignment. Initial prompts currently require CPU; Automatic falls back and NPU
 mode explains the limitation. This local build disables upstream updates to
 prevent an incompatible release replacing it.
 
+Whisper Small also has a separate **Enable NPU** option in the local Whisper
+settings. Setup downloads about 677 MB of pinned Qualcomm model and runtime
+files. Small inference stays local and retries a failed NPU request with the
+regular Whisper engine.
+
+## Upstream releases and automatic updates
+
+The fork checks stable upstream OpenWhispr releases every six hours. It queues
+them in version order, applies the ARM64 port, and opens a candidate pull request.
+A conflict leaves a draft with the affected files. After resolving it, mark the
+pull request ready to resume verification.
+
+The release workflow publishes to the fork after the ARM64 build and Snapdragon
+checks pass. These include installed transcription, the update from the last
+published build, and preservation of settings and downloaded models. Managed
+ARM64 builds verify the fork's signed update manifest and installer checksum.
+Unsigned local builds require a manual install of a managed version.
+
 ## Verification
 
 ```powershell
