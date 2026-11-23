@@ -1,5 +1,13 @@
-const modelRegistryData = require("../models/modelRegistryData.json");
+const { registryData, listRunnableLocalModels } = require("../models/registryData.js");
 const { getModelType } = require("./parakeetModelInfo");
+
+// Every offered local model, plus a retired one still on disk, since a selection can keep
+// running it.
+function runnableModelIds(section, isDownloaded) {
+  return listRunnableLocalModels(section)
+    .map(([id]) => id)
+    .filter((id) => Object.hasOwn(registryData[section], id) || isDownloaded(id));
+}
 
 // Every local speech-to-text model the registry knows, with whether it is on
 // disk and whether it is the one the app is set to use. The "default" comes
@@ -13,7 +21,9 @@ function listLocalTranscriptionModels({ whisperManager, parakeetManager, env = p
     provider === configuredProvider && model === configuredModel;
 
   const { MODEL_ID, isSupported } = require("./whisperNpu");
-  const whisper = Object.keys(modelRegistryData.whisperModels)
+  const whisper = runnableModelIds("whisperModels", (model) =>
+    whisperManager.isModelDownloaded(model)
+  )
     .filter((model) => model !== MODEL_ID || isSupported())
     .map((model) => ({
       provider: "whisper",
@@ -21,7 +31,9 @@ function listLocalTranscriptionModels({ whisperManager, parakeetManager, env = p
       downloaded: whisperManager.isModelDownloaded(model),
       default: isDefault("whisper", model),
     }));
-  const sherpa = Object.keys(modelRegistryData.parakeetModels).map((model) => {
+  const sherpa = runnableModelIds("parakeetModels", (model) =>
+    parakeetManager.isModelDownloaded(model)
+  ).map((model) => {
     const provider = getModelType(model) === "cohere-transcribe" ? "cohere" : "nvidia";
     return {
       provider,

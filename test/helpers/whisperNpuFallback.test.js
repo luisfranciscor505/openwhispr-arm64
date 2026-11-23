@@ -78,3 +78,35 @@ test("NPU reuses the configured Silero model only when VAD is enabled", async ()
   assert.equal(requests[0].vadConfig.threshold, 0.7);
   assert.equal(requests[1].vadModelPath, null);
 });
+
+test("Whisper Small routes to the enabled NPU and retries with the regular engine on failure", async (t) => {
+  const previous = process.env.WHISPER_NPU_ENABLED;
+  process.env.WHISPER_NPU_ENABLED = "true";
+  t.after(() => {
+    if (previous === undefined) delete process.env.WHISPER_NPU_ENABLED;
+    else process.env.WHISPER_NPU_ENABLED = previous;
+  });
+
+  const manager = new WhisperManager();
+  const audio = Buffer.from("recording");
+  manager.getModelPath = (model) => model;
+  const startServer = t.mock.method(manager.serverManager, "start", async () => {});
+  t.mock.method(manager.serverManager, "transcribe", async () => ({ text: "Regular Whisper" }));
+  const transcribeOnNpu = t.mock.method(manager.smallNpu, "transcribe", async () => ({
+    text: "NPU",
+  }));
+  t.mock.getter(manager.smallNpu, "installed", () => true);
+
+  const transcribe = (model) => manager._policyAllowedRunServerTranscription(audio, model, "en");
+  assert.deepEqual(await transcribe("small"), { success: true, text: "NPU" });
+  assert.equal(startServer.mock.callCount(), 0);
+
+  transcribeOnNpu.mock.mockImplementation(async () => {
+    throw new Error("NPU unavailable");
+  });
+  assert.deepEqual(await transcribe("small"), { success: true, text: "Regular Whisper" });
+  assert.equal(startServer.mock.callCount(), 1);
+
+  assert.deepEqual(await transcribe("base"), { success: true, text: "Regular Whisper" });
+  assert.equal(transcribeOnNpu.mock.callCount(), 2);
+});

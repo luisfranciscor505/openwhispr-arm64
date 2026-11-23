@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "upstreamTag": "v1.11.0",
-  "upstreamCommit": "b9e9ebefac4b961456c269164a93ddfdd53438b9",
+  "upstreamTag": "v1.12.0",
+  "upstreamCommit": "ad7424068824ceae479aa8882140ed1f7a15b5a1",
   "portRevision": 1,
   "repository": "luisfranciscor505/openwhispr-arm64",
   "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAEmONZxOGuEErKFmugR1/l8wsAsqNRLgS2qOl1tGSO+U=\n-----END PUBLIC KEY-----\n"

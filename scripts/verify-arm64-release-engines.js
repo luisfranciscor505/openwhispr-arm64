@@ -90,6 +90,24 @@ app
       result.explicitNpuFailure = true;
       npu.transcribe = original;
       assert.equal((await npu.transcribe(english, { language: "en" })).backend, "qnn-htp");
+      const small = whisper.smallNpu;
+      if (small) {
+        const smallCache = path.join(
+          app.getPath("home"),
+          ".cache",
+          "openwhispr-release-verification",
+          "whisper-small-npu",
+          small.assets.version
+        );
+        Object.defineProperty(small, "root", { value: smallCache });
+        await small.prepare();
+        assert.match(
+          (await small.transcribe(english, { language: "en" })).text,
+          /quick brown fox/i
+        );
+        assert.match((await small.transcribe(spanish, { language: "es" })).text, /prueba/i);
+        result.whisperSmallNpu = true;
+      }
       fs.writeFileSync(output, JSON.stringify(result));
     } finally {
       await whisper.stopServer();

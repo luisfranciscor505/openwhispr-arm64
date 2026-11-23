@@ -44,6 +44,7 @@ const PERSISTED_KEYS = [
   "START_MINIMIZED",
   "UI_LANGUAGE",
   "WHISPER_CUDA_ENABLED",
+  "WHISPER_NPU_ENABLED",
   "WHISPER_VULKAN_ENABLED",
   "WHISPER_VULKAN_DEVICE",
   "WHISPER_GPU_FAILED",
@@ -61,6 +62,8 @@ const PERSISTED_KEYS = [
   "VERTEX_LOCATION",
   // Written by the Settings debug toggle (set-debug-logging)
   "OPENWHISPR_LOG_LEVEL",
+  // "bundled" turns off model catalog updates (Settings privacy toggle, or managed installs)
+  "OPENWHISPR_MODEL_REGISTRY_MODE",
 ];
 
 // Module-level so writes are serialized across all instances — hotkeyManager
@@ -522,6 +525,16 @@ class EnvironmentManager {
         process.env.OPENWHISPR_LOG_LEVEL = logLevel;
       });
     return envWriteQueue;
+  }
+
+  // Off keeps the app on its bundled model catalog: no cached update, no network check.
+  saveModelRegistryUpdates(enabled) {
+    if (enabled) {
+      delete process.env.OPENWHISPR_MODEL_REGISTRY_MODE;
+      return this.removeKeyFromEnvFile("OPENWHISPR_MODEL_REGISTRY_MODE");
+    }
+    process.env.OPENWHISPR_MODEL_REGISTRY_MODE = "bundled";
+    return this._writeEnvFileAtomic(path.join(app.getPath("userData"), ".env"));
   }
 
   async clearAllPersistedData() {

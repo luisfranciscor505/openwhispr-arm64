@@ -20,10 +20,12 @@ const tagRefs = new Map(
 );
 if ((tagRefs.get(`${tagRef}^{}`) ?? tagRefs.get(tagRef)) !== release.upstreamCommit)
   throw new Error("Upstream tag/commit mismatch");
-const changedPins = git(
+const candidateBaseline = "origin/arm64";
+const baselineRelease = JSON.parse(git("show", `${candidateBaseline}:arm64-release.json`));
+const nativePinPaths = git(
   "diff",
   "--name-only",
-  "origin/arm64",
+  candidateBaseline,
   "HEAD",
   "--",
   "electron-builder.arm64-win.cjs",
@@ -34,7 +36,18 @@ const changedPins = git(
   "scripts/download-*.js",
   "scripts/lib/download-utils.js",
   "scripts/lib/windows-arm64-tools.js"
-);
+)
+  .split(/\r?\n/)
+  .filter(Boolean);
+const changedPins = nativePinPaths.filter((file) => {
+  const entry = (revision) => git("ls-tree", revision, "--", file);
+  // A native input may follow upstream if the fork never diverged from the previous
+  // upstream pin and the candidate matches the newly authenticated upstream tree.
+  return (
+    entry(candidateBaseline) !== entry(baselineRelease.upstreamCommit) ||
+    entry("HEAD") !== entry(release.upstreamCommit)
+  );
+});
 const { changedNativeDependencies } = require("./lib/arm64-native-pins");
 const previousLock = JSON.parse(git("show", "origin/arm64:package-lock.json"));
 const upstreamLock = JSON.parse(git("show", `${release.upstreamCommit}:package-lock.json`));
@@ -45,7 +58,7 @@ const forkOnlyPins = new Set(changedNativeDependencies(upstreamLock, candidateLo
 const dependencyChanges = changedNativeDependencies(previousLock, candidateLock).filter((name) =>
   forkOnlyPins.has(name)
 );
-if (changedPins || dependencyChanges.length)
+if (changedPins.length || dependencyChanges.length)
   throw new Error(
     `Native/model pin changes require a separate validated port release: ${changedPins} ${dependencyChanges.join(", ")}`
   );

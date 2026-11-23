@@ -1,6 +1,6 @@
 {
-  "requestedTag": "v1.11.0",
-  "upstreamCommit": "b9e9ebefac4b961456c269164a93ddfdd53438b9",
+  "requestedTag": "v1.12.0",
+  "upstreamCommit": "ad7424068824ceae479aa8882140ed1f7a15b5a1",
   "blocked": false,
   "conflicts": []
 }
